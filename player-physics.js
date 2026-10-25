@@ -30,7 +30,7 @@ export class PlayerBody {
     for(let i=0;i<8;i++){const a=i*Math.PI/4;h=Math.max(h,this.sample(x+Math.cos(a)*this.radius,z+Math.sin(a)*this.radius));}
     return h;
   }
-  reset(x=0,z=4){this.x=x;this.z=z;this.feet=this.ground(x,z);this.vy=0;this.vx=0;this.vz=0;this.grounded=true;this.blocked=false;this.swimming=false;this.diveDepth=0;this.mode='walk';this.waterLevel=-.04;}
+  reset(x=0,z=4){this.x=x;this.z=z;this.feet=this.ground(x,z);this.vy=0;this.vx=0;this.vz=0;this.grounded=true;this.blocked=false;this.swimming=false;this.diveDepth=0;this.mode='walk';this.waterLevel=-.04;this.coyote=.09;this.jumpBuffer=0;}
   tryMove(x,z){
     if(this.canMove&&!this.canMove(x,z,this.radius,this.feet))return false;
     const h=this.ground(x,z),center=this.sample(x,z);
@@ -43,9 +43,11 @@ export class PlayerBody {
   }
   update(delta,input,yaw,time=0){
     const count=Math.max(1,Math.ceil(Math.min(delta,.15)*90)),dt=Math.min(delta,.15)/count;
-    if(input.jump&&this.grounded&&!this.swimming){this.vy=4.4;this.grounded=false;}
+    if(input.jump)this.jumpBuffer=.12;
     this.blocked=false;
     for(let i=0;i<count;i++){
+      this.coyote=this.grounded?.09:Math.max(0,this.coyote-dt);this.jumpBuffer=Math.max(0,this.jumpBuffer-dt);
+      if(this.jumpBuffer>0&&this.coyote>0&&!this.swimming){this.vy=4.4;this.grounded=false;this.coyote=0;this.jumpBuffer=0;}
       this.waterLevel=this.water(this.x,this.z,time);
       const floor=this.ground(this.x,this.z),depth=this.waterLevel-floor;
       if(this.swimming){if(depth<.88){this.swimming=false;this.diveDepth=0;}}
@@ -55,11 +57,12 @@ export class PlayerBody {
       const speed=this.swimming?(input.sprint?2.75:1.8):(input.sprint?4.5:2.9);
       const tx=(-Math.sin(yaw)*forward+Math.cos(yaw)*side)*speed;
       const tz=(-Math.cos(yaw)*forward-Math.sin(yaw)*side)*speed;
-      const easing=1-Math.exp(-(this.swimming?4.5:12)*dt);
+      const easing=1-Math.exp(-(this.swimming?4.5:this.grounded?(length?18:30):8)*dt);
       this.vx+=(tx-this.vx)*easing;this.vz+=(tz-this.vz)*easing;
       const mx=this.vx*dt,mz=this.vz*dt;
       if(!this.tryMove(this.x+mx,this.z+mz)){
         const ax=this.tryMove(this.x+mx,this.z),az=this.tryMove(this.x,this.z+mz);
+        if(!ax)this.vx=0;if(!az)this.vz=0;
         this.blocked=!(ax&&az);
       }
       if(this.swimming){

@@ -28,7 +28,8 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
     game.bag();try{localStorage.setItem(saveKey,JSON.stringify(game.state));saveState='进度已存到本机';}catch{saveState='保存失败 · 请勿刷新';if(!noticeOnce){notify('浏览器存储不可用，进度暂时只能保留在本次');noticeOnce=true;}}
   }
   function result(r){if(r.pending)return r;if(r.ok){save();window.dispatchEvent(new Event('island:inventory'));}if(r.message)notify(r.message);return r;}
-  function execute(kind,args,local){if(remoteAction){remoteAction(kind,args).then(result).catch(e=>notify(e.message));return {ok:false,pending:true,message:'同步中'};}return local();}
+  function impact(kind,r){if(r.ok&&['tree','harvest','hunt'].includes(kind))document.getElementById('reticle')?.animate?.([{boxShadow:'0 0 0 1px #fff9',background:'#fffefa'},{boxShadow:'0 0 0 8px #fff0',background:'#fff7'}],{duration:190,easing:'ease-out'});return r;}
+  function execute(kind,args,local){if(remoteAction){remoteAction(kind,args).then(r=>result(impact(kind,r))).catch(e=>notify(e.message));return {ok:false,pending:true,message:'同步中'};}return impact(kind,local());}
   const useItem=id=>result(execute('eat',{id},()=>game.eat(id)));
   const putDown=index=>result(execute('drop',{index},()=>game.drop(index,player.getState())));
   function select(i){selected=Math.max(0,Math.min(7,i));game.state.selected=selected;attack=null;}
@@ -45,7 +46,7 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
     const node=target.source||target,rule=NODE_TYPES[node.type];
     if(rule.tool&&(!matchesTool(held(),rule.tool)||!game.state.inventory[held()])){notify('需要装备'+ITEMS[rule.tool].name+' · B 背包绑定快捷键');return;}
     if(node.type==='tree'&&game.treeStage(node).phase==='falling')return;
-    attack={node,age:0,hit:false,duration:held()==='ironaxe'?.36:node.type==='tree'?.58:.4,tool:held()};
+    attack={node,age:0,hit:false,duration:held()==='ironaxe'?.56:node.type==='tree'?.62:.48,tool:held()};
   }
   window.addEventListener('island:primary',action);
   const cancel=()=>{if(building){cancelBuild();notify('已取消建造，材料没有消耗');}};
@@ -64,7 +65,7 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
     const objects=[...nodes.filter(n=>game.available(n)).map(n=>game.interactionNode(n)),...game.state.buildings.map(b=>({...b,building:true}))];
     for(const n of objects){
       const d=Math.hypot(n.x-s.x,n.z-s.z),dy=Math.abs(n.y-s.feet);if(d>3||dy>1.9)continue;
-      to.set(n.x-s.x,0,n.z-s.z).normalize();const facing=to.dot(forward);if(d>.65&&facing<.15)continue;
+      to.set(n.x-s.x,0,n.z-s.z).normalize();const facing=to.dot(forward);if(d>.65&&facing<.78)continue;
       const locked=n.type==='tree'&&(!matchesTool(held(),'axe')||!game.state.inventory[held()]);
       const rank=facing*1.2-d*.35-(locked?1:0);if(rank>score){score=rank;best=n;}
     }return best;

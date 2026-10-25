@@ -4,6 +4,7 @@ import {createVegetationWind} from './vegetation-wind.js';
 import {extraModel} from './extra-models.js';
 import {hashSeed} from './world-seed.js';
 import {expeditionModel} from './expedition-models.js';
+import {poseBoat} from './boat-motion.js';
 const mat=color=>new THREE.MeshStandardMaterial({color,roughness:.88});
 const palette={cut:mat('#dcc28c')};
 function mesh(g,geometry,material,x,y,z,sx=1,sy=sx,sz=sx){const m=new THREE.Mesh(geometry,material);m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=true;m.receiveShadow=true;g.add(m);return m;}
@@ -13,7 +14,7 @@ function flameLobe(g,color,x,y,z,width,height){
   const m=mesh(g,geo,new THREE.MeshBasicMaterial({color}),x,y,z);return m;
 }
 export function buildingModel(type,assets){
-  if(type==='boat')return expeditionModel('Rowboat');
+  if(type==='boat'){const g=new THREE.Group(),hull=expeditionModel('Rowboat');g.name='Boat_heading';hull.rotation.y=Math.PI;g.add(hull);return g;}
   if(type==='bench')return extraModel(type);
   const g=assets.getObjectByName(type==='fire'?'Fire':'Shelter').clone(true);
   if(type==='fire'){
@@ -64,7 +65,7 @@ export function createSurvivalWorld(scene,game,shadowChanged,assets){
     }else if(n.type==='berry'){const fruit=g.getObjectByName('fruit');if(fruit.visible!==available){fruit.visible=available;dirty=true;}}else if(g.visible!==available){g.visible=available;dirty=true;}}
     for(const [id,g]of buildMeshes){const b=game.state.buildings.find(b=>b.id===id);if(!b||game.view&&Math.hypot(b.x-game.view.x,b.z-game.view.z)>100){group.remove(g);buildMeshes.delete(id);dirty=true;}}
     for(const b of game.state.buildings)if(!buildMeshes.has(b.id)&&(!game.view||Math.hypot(b.x-game.view.x,b.z-game.view.z)<100)){const g=buildingModel(b.type,assets);g.position.set(b.x,b.y,b.z);g.rotation.y=b.yaw;group.add(g);buildMeshes.set(b.id,g);dirty=true;}
-    for(const b of game.state.buildings)if(b.type==='boat'){const g=buildMeshes.get(b.id);if(g){g.position.set(b.x,b.y,b.z);g.rotation.y=b.yaw;const moving=!!b.owner||b.sailing;for(const name of ['Oar_L','Oar_R']){const o=g.getObjectByName(name);if(o)o.rotation.y=moving?Math.sin(game.state.elapsed*3)*(name==='Oar_L'?1:-1)*.5:0;}}}
+    for(const b of game.state.buildings)if(b.type==='boat'){const g=buildMeshes.get(b.id);if(g){g.position.set(b.x,b.y,b.z);poseBoat(g,b,game.state.elapsed);}}
     if(dirty)shadowChanged();
   }
   function clearGhost(){if(ghost){group.remove(ghost);ghost.traverse(o=>{if(o.isMesh)o.material.dispose();});ghost=null;}ghostType=null;}

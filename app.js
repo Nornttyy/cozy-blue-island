@@ -181,7 +181,7 @@ async function init() {
   const extra=await new GLTFLoader().loadAsync('./assets/survival-extra-16.glb');
   finishMaterials(extra.scene,renderer);installExtraModels(extra.scene);
   setProgress(91,'整理探险者的行囊、船与野生动物');
-  const models=await new GLTFLoader().loadAsync('./assets/expedition-17.glb');installExpeditionModels(models.scene);
+  const models=await new GLTFLoader().loadAsync('./assets/expedition-20.glb');finishMaterials(models.scene,renderer);installExpeditionModels(models.scene);
   survival=createSurvival(scene,camera,player,()=>{renderer.shadowMap.needsUpdate=true;},props.scene,springAnchor.layoutSample,{world:worldMath,legacy:!!worldDescriptor.legacy,descriptor:worldDescriptor,saveKey:worldDescriptor.legacy?'cozy-island-survival-v1':'cozy-island-save-'+worldDescriptor.id});
   player.world=worldMath;
   hud=createHUD(player,{setWaves:enabled=>{paused=!enabled;},survival});
