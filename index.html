@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#224f49">
+  <meta name="description" content="在晴蓝小岛采集、制作、建造自己的营地。漫步海岸、潜入清澈的海水，慢慢开始岛上生活。">
+  <title>晴蓝小岛 · 荒岛求生</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./title-menu.css">
+  <link rel="stylesheet" href="./survival.css">
+  <link rel="stylesheet" href="./paper-ui.css">
+  <link rel="stylesheet" href="./expedition.css">
+  <script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/addons/"}}</script>
+</head>
+<body class="booting">
+  <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="i-rope" viewBox="0 0 24 24"><path d="M7 21c-8-7 6-20 11-15 6 5-9 19-13 11s8-13 10-10-5 12-8 9M16 17l5 4"/></symbol>
+    <symbol id="i-plank" viewBox="0 0 24 24"><path d="m2 8 16-5 4 4-16 5ZM6 12v8l16-5V7M2 8v8l4 4M8 14l11-4M8 17l9-3"/></symbol>
+    <symbol id="i-pickaxe" viewBox="0 0 24 24"><path d="m6 22 9-16M2 10C7 0 17 0 23 10L13 6Z"/></symbol>
+    <symbol id="i-flint" viewBox="0 0 24 24"><path d="m3 18 4-12 8-4 7 10-5 9Zm4-12 5 9 10-3M3 18l9-3 5 6"/></symbol>
+    <symbol id="i-clay" viewBox="0 0 24 24"><path d="m3 18 3-9 7-5 7 5 1 10-12 3ZM6 9l7 3 7-3M13 12l-4 10"/></symbol>
+    <symbol id="i-herb" viewBox="0 0 24 24"><path d="M12 23V7M12 17C2 18 1 7 4 5c6 0 7 8 8 12Zm0-6C12 3 18 1 22 2c1 7-4 11-10 9Z"/></symbol>
+    <symbol id="i-bandage" viewBox="0 0 24 24"><path d="m3 7 4-4 14 14-4 4ZM9 9l6 6M8 5l-3 3m14 8-3 3"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-mushroom" viewBox="0 0 24 24"><path d="M2 13C1-2 24-2 22 13ZM9 13l-2 9h10l-2-9M6 8h1m6-3h1m3 4h1"/></symbol>
+    <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 2h6v5c10 5 8 15-3 15S-1 12 9 7ZM9 5h6M9 16c-3-2-3-5 0-7"/></symbol>
+    <symbol id="i-water" viewBox="0 0 24 24"><path d="M9 2h6v5c10 5 8 15-3 15S-1 12 9 7ZM5 14h14M9 5h6"/></symbol>
+    <symbol id="i-torch" viewBox="0 0 24 24"><path d="m10 13-1 10h6l-1-10M8 13h8M8 10C0 5 15 1 13 1c0 5 11 9 3 10M11 8l1-3 2 4"/></symbol>
+    <symbol id="i-bench" viewBox="0 0 24 24"><path d="M2 9h20v4H2ZM5 13v9m14-9v9M5 18h14M4 9V6h8v3m5-3 3-3"/></symbol>
+    <symbol id="i-wood" viewBox="0 0 24 24"><path d="m4 17 12-12 5 5L9 22ZM4 17c-3-3 2-8 5-5s-2 8-5 5Zm8-4 5-5M5 5l3 3M3 9l3 1"/></symbol>
+    <symbol id="i-stone" viewBox="0 0 24 24"><path d="m3 16 4-10 9-3 6 10-4 7H7Zm4-10 5 8 10-1M3 16l9-2 6 6"/></symbol>
+    <symbol id="i-fiber" viewBox="0 0 24 24"><path d="M12 22C3 17 2 9 3 3c8 3 9 11 9 19Zm0 0C10 11 15 3 22 2c-1 9-3 16-10 20ZM8 10l4 12 6-13"/></symbol>
+    <symbol id="i-axe" viewBox="0 0 24 24"><path d="m4 22 11-17 3 2L7 23ZM12 5l5-3 5 3-1 8-7-4M13 8l4 3"/></symbol>
+    <symbol id="i-berry" viewBox="0 0 24 24"><circle cx="8" cy="15" r="5"/><circle cx="16" cy="15" r="5"/><path d="M12 11V4m0 4C5 9 5 4 5 3c5-1 7 2 7 5Zm0 0c0-5 5-6 7-5 0 4-3 6-7 5Z"/></symbol>
+    <symbol id="i-coconut" viewBox="0 0 24 24"><path d="M12 3C1 3 0 21 12 22 24 21 23 3 12 3ZM8 4c-5 7-4 12 0 17M16 4c5 7 4 12 0 17"/><circle cx="10" cy="7" r="1"/><circle cx="14" cy="7" r="1"/></symbol>
+    <symbol id="i-shell" viewBox="0 0 24 24"><path d="M9 21C7 17 1 15 2 8 3 0 21 0 22 8c1 7-5 9-7 13ZM12 19V4M9 18 6 6m9 12 3-12M4 10l4 7m12-7-4 7"/></symbol>
+    <symbol id="i-meal" viewBox="0 0 24 24"><path d="M2 14c0 10 20 10 20 0ZM5 14c2-8 13-8 14 0M8 7c-4-4 4-3 0-6m7 6c-4-4 4-3 0-6"/></symbol>
+    <symbol id="i-fire" viewBox="0 0 24 24"><path d="M8 18C-2 11 11 8 10 1c5 4 2 7 6 8l2-3c8 9-1 15-4 12 3-4-1-7-2-8 1 5-5 6-4 8ZM3 23l18-4M3 19l18 4"/></symbol>
+    <symbol id="i-shelter" viewBox="0 0 24 24"><path d="m2 20 10-18 10 18ZM8 20l4-9 4 9M2 20v3m20-3v3M5 15l7-13 7 13M7 11h10"/></symbol>
+    <symbol id="i-island" viewBox="0 0 32 32"><path d="M4 25c5-8 18-8 24 0M3 28c4-3 6 3 10 0s6 3 10 0 5 0 6 0M15 21c2-5 2-9 1-13M16 9C11 4 7 6 6 10c4-1 7-1 10-1Zm0 0c1-6 7-7 10-3-4 0-7 1-10 3Zm1 0c5-2 10 1 10 6-4-3-7-5-10-6Z"/></symbol>
+    <symbol id="i-pack" viewBox="0 0 24 24"><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M5 7h14v14H5ZM5 9c3 5 11 5 14 0M9 16h6v5M11 10h2v3h-2Z"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2ZM9 3v16M15 5v16"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M5 3h14v18H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM6 3v18M10 7h5M10 11h5M10 15h3"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h3v14H7ZM14 5h3v14h-3Z"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20C8 17 3 13 3 8a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 5-5 9-9 12Z"/></symbol>
+    <symbol id="i-food" viewBox="0 0 24 24"><path d="M5 3v7m3-7v7M2 3v7a3 3 0 0 0 6 0M5 13v8M19 3c-4 2-5 8 0 9V3Zm0 9v9"/></symbol>
+    <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2C9 7 5 11 5 15a7 7 0 0 0 14 0c0-4-4-8-7-13ZM8 15a4 4 0 0 0 4 4"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 16c4-7 7 4 11-2s5-11 7-7c2 4-3 6-4 6M2 20c3-3 5 3 8 0s5 3 8 0 4 0 4 0"/></symbol>
+    <symbol id="i-foot" viewBox="0 0 24 24"><path d="M6 12c-3-1-4-4-3-7s4-4 5-1 1 7-2 8Zm-3 3 4 1-1 5-4-1Zm14 0c-3 0-4-4-3-7s4-3 5 0 1 6-2 7Zm-2 3 4-1 1 4-4 1Z"/></symbol>
+    <symbol id="i-hand" viewBox="0 0 24 24"><path d="M7 12V5a2 2 0 0 1 3 0v6-8a2 2 0 0 1 3 0v8-6a2 2 0 0 1 3 0v7-4a2 2 0 0 1 3 0v7c0 4-3 7-7 7-3 0-4-2-6-4l-3-5c-1-2 2-3 3-1l1 1Z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  </defs></svg>
+  <main id="viewport" aria-label="第一人称荒岛"></main>
+  <div class="screen-vignette" aria-hidden="true"></div>
+  <div id="game-hud" hidden>
+    <div id="voyage-compass" hidden></div>
+    <header class="hud-top">
+      <div class="island-brand"><span class="brand-seal"><svg><use href="#i-island"/></svg></span><div><h1>晴蓝小岛</h1><span>荒岛求生 <i>营地初建</i></span></div></div>
+      <div class="compass" aria-label="朝向罗盘"><div class="compass-label"><span id="heading-name">南</span><strong id="heading-degrees">180°</strong></div><div class="compass-window"><div id="compass-ticks"></div></div><span class="compass-needle"></span></div>
+      <nav class="hud-actions" aria-label="游戏菜单"><button data-open="inventory" aria-label="打开背包 B" title="背包 B"><svg><use href="#i-pack"/></svg><kbd>B</kbd></button><button data-open="map" aria-label="打开地图 M" title="地图 M"><svg><use href="#i-map"/></svg><kbd>M</kbd></button><button id="pause-walk" aria-label="暂停 Esc" title="暂停 Esc"><svg><use href="#i-pause"/></svg></button></nav>
+    </header>
+    <aside class="field-goal"><button id="goal-toggle" aria-expanded="true"><span class="goal-mark"><svg><use href="#i-book"/></svg></span><span><small>海岛手账</small><b id="goal-title">建立第一个营地</b></span><span id="goal-count">0/5</span></button><div id="goal-detail"><p id="next-goal">收集岸边材料</p><div class="goal-track"><i id="goal-progress"></i></div><button class="text-button" data-open="journal">查看手账 <kbd>J</kbd></button></div></aside>
+    <div class="environment"><svg><use href="#i-sun"/></svg><span>晴天 <i>·</i> 日间</span><small id="region-label">岛上草地</small></div>
+    <section class="survival-status" aria-label="健康、饱食与水分"><div class="status-heading">生存状态 <span id="save-status">本机自动存档</span></div><div class="vitals"><div class="vital health"><span><svg><use href="#i-heart"/></svg></span><div><small>健康</small><b id="vital-health">100</b><div class="vital-track"><i id="meter-health"></i></div></div></div><div class="vital food"><span><svg><use href="#i-food"/></svg></span><div><small>饱食</small><b id="vital-food">78</b><div class="vital-track"><i id="meter-food"></i></div></div></div><div class="vital water"><span><svg><use href="#i-drop"/></svg></span><div><small>水分</small><b id="vital-water">72</b><div class="vital-track"><i id="meter-water"></i></div></div></div></div></section>
+    <div class="movement-status"><span class="movement-icon"><svg><use id="mode-icon" href="#i-foot"/></svg></span><div><small id="mode-caption">脚下是陆地</small><strong id="mode-label">自由探索</strong></div><span id="depth-readout" hidden>0.0<small>米深</small></span></div>
+    <nav class="quick-access" aria-label="快捷物品栏"><div class="equipped-label"><span id="equipped-name">空手</span><small>1–8 / 滚轮切换</small></div><div id="hotbar"></div><button class="bag-shortcut" data-open="inventory" aria-label="查看背包"><svg><use href="#i-pack"/></svg><kbd>B</kbd></button></nav>
+    <p id="control-mode" class="control-hint"></p>
+    <div id="reticle" hidden aria-hidden="true"></div>
+    <div id="interaction" hidden><div><kbd>左键</kbd><span><b id="interaction-label">枯枝</b><small id="interaction-caption">点击拾取</small></span></div><div class="interaction-track"><i id="interaction-progress"></i></div></div>
+    <div id="hud-toast" role="status" aria-live="polite"></div>
+  </div>
+  <section id="title-screen" class="title-screen" hidden aria-label="游戏主菜单">
+    <div class="title-atmosphere" aria-hidden="true"></div>
+    <div class="game-logo"><div class="logo-caption"><span></span> 海 岛 生 存 <span></span></div><h2 aria-label="晴蓝小岛"><span>晴蓝</span><span>小岛<svg class="logo-sun" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="10"/><path d="M24 2v8m0 28v8M2 24h8m28 0h8M8 8l6 6m20 20 6 6M8 40l6-6M34 14l6-6"/></svg></span></h2><div class="logo-rule"><svg viewBox="0 0 180 16" aria-hidden="true"><path d="M1 8h55m68 0h55M66 8c6-8 12 8 18 0s12 8 18 0 12 0 12 0"/></svg></div><p>把日子，过成一座岛。</p></div>
+    <nav class="title-menu" aria-label="主菜单选项"><button id="title-start" class="island-menu-button start-button"><span class="button-number">01</span><span id="title-start-label">开始探索</span><svg><use href="#i-arrow"/></svg></button><button id="title-settings" class="island-menu-button"><span class="button-number">02</span><span>游戏设置</span><span class="menu-dot"></span></button><button id="title-guide" class="island-menu-button"><span class="button-number">03</span><span>操作指南</span><span class="menu-dot"></span></button></nav>
+    <div class="title-location" aria-hidden="true"><span>晴蓝海域</span><i></i><small>风轻，浪缓。</small></div>
+    <button id="title-worlds" class="world-button">世界 / 新建随机地图</button>
+    <footer class="title-footer"><span>单人 / 好友合作 · 探索远方群岛</span><span>18 / 纸上远航</span></footer>
+  </section>
+  <section id="walk-gate" class="pause-layer" hidden aria-label="暂停菜单">
+    <div class="pause-game-card"><span class="eyebrow">TAKE A LITTLE BREAK</span><h2 id="pause-title">歇一会儿</h2><p id="pause-description">点击下方按钮锁定鼠标；Esc 释放并暂停。</p><button id="enter-island" class="primary"><span id="enter-label">锁定鼠标，继续探索</span><svg><use href="#i-arrow"/></svg></button><div id="pointer-lock-help" hidden role="status"><p>内置窗口可能不支持鼠标锁定。可复制网址，在电脑 Chrome 或 Edge 中打开，再点击开始。</p><button id="copy-game-link" class="secondary">复制游戏网址</button><input id="game-link-manual" aria-label="游戏网址，可手动复制" readonly hidden><small id="pointer-lock-error"></small></div><div class="pause-links"><button data-open="inventory"><svg><use href="#i-pack"/></svg>背包</button><button data-open="map"><svg><use href="#i-map"/></svg>地图</button><button data-open="journal"><svg><use href="#i-book"/></svg>手账</button></div><div class="pause-secondary"><button id="settings-open">游戏设置</button><button id="return-title">返回主菜单</button></div><small>暂停不消耗状态 · 进度自动保存在本机</small></div>
+  </section>
+  <dialog id="field-panel" aria-labelledby="panel-title"><div class="panel-top"><span class="panel-kicker">ISLAND FIELD KIT</span><button id="panel-close" class="icon-button" aria-label="关闭面板"><svg><use href="#i-close"/></svg></button></div><h2 id="panel-title">随身背包</h2><nav class="panel-tabs" aria-label="面板分类"><button data-tab="inventory">背包</button><button data-tab="map">地图</button><button data-tab="journal">手账</button><button data-tab="settings">设置</button></nav><div id="panel-content"></div><footer class="panel-footer"><span id="panel-footer-note">不需要登录 · 本机偏好设置</span><button id="panel-resume" class="primary small">返回小岛 <svg><use href="#i-arrow"/></svg></button></footer></dialog>
+  <div id="loading" role="status" aria-live="polite"><div class="load-card"><span class="brand-seal large"><svg><use href="#i-island"/></svg></span><span class="eyebrow">WELCOME TO YOUR ISLAND</span><h2 id="load-title">海风正在靠岸</h2><p id="load-detail">准备小岛与清澈海水</p><div class="load-line"><div class="track"><div id="progress"></div></div><span id="percentage">0%</span></div><small>一座小岛，慢慢探索。</small><button id="retry" hidden>重新加载</button></div></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
