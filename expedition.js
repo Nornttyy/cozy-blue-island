@@ -4,7 +4,7 @@ import {createEquipmentViewmodel,poseEquipment,WEAPON_TIMING} from './equipment-
 import {advanceBoat} from './boat-motion.js';
 import {ITEMS} from './survival-state.js';
 import {CHUNK} from './world-seed.js';
-import {wildlifeIn,animalPose,SPECIES,hunt} from './wildlife-math.js';
+import {wildlifeIn,animalPose,SPECIES,hostilePose,hunt} from './wildlife-math.js';
 import {createBowController} from './bow-controller.js';
 export function createExpedition(scene,camera,player,survival,math,shadowChanged){
  // Only equipment belongs to the local view. Full characters remain visible to peers.
@@ -36,13 +36,13 @@ export function createExpedition(scene,camera,player,survival,math,shadowChanged
     }
     if(attackAge>=timing.duration)pendingStrike=null;
    }
-   if(key!==cell){cell=key;const wanted=new Map(),cx=Math.floor(p.x/CHUNK),cz=Math.floor(p.z/CHUNK);for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++)for(const a of wildlifeIn(math,cx+i,cz+j))wanted.set(a.id,a);for(const [id,a]of creatures)if(!wanted.has(id)){scene.remove(a.model);creatures.delete(id);}for(const a of wanted.values())if(!creatures.has(a.id)){const model=expeditionModel(a.type);scene.add(model);creatures.set(a.id,{...a,model,lastDamage:-10});}shadowChanged();}
-   target=null;let best=Infinity;camera.getWorldDirection(forward);for(const a of creatures.values()){const model=a.model,hp=game.state.wildlife?.[a.id]??SPECIES[a.type].hp;model.visible=hp>0;if(!model.visible)continue;const pos=animalPose(a,game.state.elapsed,math);model.position.set(pos.x,pos.y,pos.z);model.rotation.y=pos.yaw;const tail=model.getObjectByName('Tail');if(tail)tail.rotation.y=Math.sin(time*7)*.35;
+   if(key!==cell){cell=key;const wanted=new Map(),cx=Math.floor(p.x/CHUNK),cz=Math.floor(p.z/CHUNK);for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++)for(const a of wildlifeIn(math,cx+i,cz+j))wanted.set(a.id,a);for(const [id,a]of creatures)if(!wanted.has(id)){scene.remove(a.model);creatures.delete(id);}for(const a of wanted.values())if(!creatures.has(a.id)){const model=expeditionModel(a.type);scene.add(model);creatures.set(a.id,{...a,model,lastDamage:-10,motion:null});}shadowChanged();}
+   target=null;let best=Infinity;camera.getWorldDirection(forward);for(const a of creatures.values()){const model=a.model,hp=game.state.wildlife?.[a.id]??SPECIES[a.type].hp;model.visible=hp>0;if(!model.visible)continue;const threat=hostilePose(a,game.state.elapsed,math,game,p,a.motion,dt),pos=threat.pose;a.motion=threat.memory;model.position.set(pos.x,pos.y,pos.z);model.rotation.y=pos.yaw;const tail=model.getObjectByName('Tail');if(tail)tail.rotation.y=Math.sin(time*7)*.35;
     animateWildlife(model,a.type,game.state.elapsed+a.phase);
     if(a.previousHp!==undefined&&hp<a.previousHp)a.hitTime=time;a.previousHp=hp;
     if(a.hitTime!==undefined){const age=time-a.hitTime;if(age<.22){const recoil=Math.sin(age/.22*Math.PI)*.07;model.position.x+=Math.sin(p.yaw)*recoil;model.position.z+=Math.cos(p.yaw)*recoil;}}
-    temp.set(pos.x,pos.y+(a.type==='Boar'?.4:.18),pos.z).sub(camera.position);const d=temp.length(),along=temp.dot(forward),off=Math.sqrt(Math.max(0,d*d-along*along));if(along>0&&d<(ITEMS[survival.held()]?.range||3)+1&&off<Math.max(.48,d*.025)&&d<best){target=a;best=d;}
-    if(p.active&&a.type==='Boar'&&Math.hypot(p.x-pos.x,p.z-pos.z)<1.25&&Math.abs(p.feet-pos.y)<1&&game.state.elapsed-a.lastDamage>2){a.lastDamage=game.state.elapsed;game.state.vitals.health=Math.max(0,game.state.vitals.health-(game.state.inventory.leathervest?5.2:8));notice('野猪撞到了你 · 后退或用武器防身');document.body.classList.add('taking-hit');setTimeout(()=>document.body.classList.remove('taking-hit'),230);}
+    temp.set(pos.x,pos.y+({Boar:.4,RazorCrab:.24,Viper:.24}[a.type]??.18),pos.z).sub(camera.position);const d=temp.length(),along=temp.dot(forward),off=Math.sqrt(Math.max(0,d*d-along*along));if(along>0&&d<(ITEMS[survival.held()]?.range||3)+1&&off<Math.max(.48,d*.025)&&d<best){target=a;best=d;}
+    const species=SPECIES[a.type];if(p.active&&threat.canStrike&&game.state.elapsed-a.lastDamage>species.cooldown){a.lastDamage=game.state.elapsed;const damage=game.state.inventory.leathervest?species.damage*.65:species.damage;game.state.vitals.health=Math.max(0,game.state.vitals.health-damage);player.pushFrom?.(pos.x,pos.z,a.type==='Boar'?1.55:.82);survival.save();notice(species.name+(a.type==='Boar'?'冲撞':'扑咬')+'了你 · 健康 −'+Math.ceil(damage));document.body.classList.add('taking-hit');setTimeout(()=>document.body.classList.remove('taking-hit'),230);}
    }
    const pickingLoot=survival.interactionTarget?.type==='drop';if(target&&!pickingLoot&&!survival.isPlacing){if(p.active&&ITEMS[survival.held()]?.weapon){document.getElementById('interaction').hidden=false;document.getElementById('interaction-label').textContent=SPECIES[target.type].name;document.getElementById('interaction-caption').textContent=`${survival.held()==='bow'?'按住拉弓 · 松手射出':'左键攻击'} · ${game.state.wildlife?.[target.id]??SPECIES[target.type].hp} 体力`;}}
    first.visible=p.active&&!boatId;for(const [id,m]of Object.entries(tools)){m.visible=id===survival.held()&&game.state.inventory[id]>0;const phase=pendingStrike?.tool===id?attackAge/WEAPON_TIMING[id].duration:survival.swing>0?survival.swing:null;poseEquipment(m,camera.aspect,phase,time,p.speed||0);}

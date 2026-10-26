@@ -58,6 +58,7 @@ export function firstPerson(camera,canvas,terrain,seafloor,spring=null,world=nul
     reset,begin,pause,consumeLandings:()=>body.consumeLandings(),setReducedMotion:value=>{reducedMotion=!!value;},
     setVehicle(value){vehicle=value;},
     setCollision(check){body.canMove=check;},
+    pushFrom(x,z,strength=.9){if(vehicle||!Number.isFinite(x)||!Number.isFinite(z))return;const dx=body.x-x,dz=body.z-z,length=Math.hypot(dx,dz)||1;body.vx+=dx/length*strength;body.vz+=dz/length*strength;body.vy=Math.max(body.vy,.8);},
     restore(position){body.reset(position.x,position.z);yaw=Number.isFinite(position.yaw)?position.yaw:Math.PI;pitch=-.32;eye=body.feet+body.eyeHeight;keys.clear();jump=false;window.dispatchEvent(new Event('island:relocated'));},
     setSensitivity(value){sensitivity=Math.max(.5,Math.min(2,Number(value)||1));},
     sampleLand:landSample,

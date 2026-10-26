@@ -66,7 +66,7 @@ export const GOALS=[
 const clamp=(n,a,b)=>Number.isFinite(n)?Math.max(a,Math.min(b,n)):a;
 export const TREE_HITS=4,LOG_HITS=3,FALL_SECONDS=1.4,TRUNK_LENGTH=3.45;
 export function segmentDistance(x,z,ax,az,bx,bz){const dx=bx-ax,dz=bz-az,t=clamp(((x-ax)*dx+(z-az)*dz)/(dx*dx+dz*dz||1),0,1);return Math.hypot(x-ax-t*dx,z-az-t*dz);}
-export function freshState(){return {version:1,inventoryVersion:2,inventory:Object.fromEntries(Object.keys(ITEMS).map(k=>[k,0])),bag:Array(BAG_SIZE).fill(null),hotbar:defaultHotbar(),selected:0,vitals:{health:100,food:78,water:72,oxygen:100},elapsed:0,depleted:{},trees:{},wildlife:{},buildings:[],drops:[],nextDrop:0,goals:{},position:null,camp:null,restsAt:-120};}
+export function freshState(){return {version:1,inventoryVersion:2,inventory:Object.fromEntries(Object.keys(ITEMS).map(k=>[k,0])),bag:Array(BAG_SIZE).fill(null),hotbar:defaultHotbar(),selected:0,vitals:{health:100,food:78,water:72,oxygen:100},elapsed:0,depleted:{},trees:{},wildlife:{},angered:{},buildings:[],drops:[],nextDrop:0,goals:{},position:null,camp:null,restsAt:-120};}
 export function makeLayout(sample){
   const nodes=[];
   const add=(type,x,z)=>{const y=sample(x,z);if(!Number.isFinite(y)||y<.3)return false;if(nodes.some(n=>Math.hypot(n.x-x,n.z-z)<1.2))return false;nodes.push({id:`n${nodes.length}`,type,x,z,y});return true;};
@@ -92,6 +92,7 @@ export function decodeSave(raw,nodes,sample,expanded=false){
   for(const k in s.vitals)s.vitals[k]=clamp(data.vitals[k]??s.vitals[k],0,100);
   s.elapsed=clamp(data.elapsed,0,1e9);s.restsAt=clamp(data.restsAt??-120,-120,s.elapsed);
   s.wildlife={};for(const [id,hp]of Object.entries(data.wildlife||{}))if(/^a-?\d+,-?\d+:\d+$/.test(id)&&Number.isFinite(hp))s.wildlife[id]=clamp(hp,0,100);
+  s.angered={};for(const [id,until] of Object.entries(data.angered||{}))if(/^a-?\d+,-?\d+:\d+$/.test(id)&&Number.isFinite(until)&&until>s.elapsed)s.angered[id]=clamp(until,s.elapsed,s.elapsed+300);
   for(const n of nodes){const v=data.depleted?.[n.id];if(v===true||Number.isFinite(v)&&v>0)s.depleted[n.id]=v===true?true:clamp(v,0,s.elapsed+180);}
   if(expanded)for(const [id,v]of Object.entries(data.depleted||{}))if(/^c-?\d+,-?\d+:\d+$/.test(id)&&(v===true||Number.isFinite(v)&&v>0))s.depleted[id]=v===true?true:clamp(v,0,s.elapsed+180);
   for(const n of nodes.filter(n=>n.type==='tree')){
@@ -113,7 +114,7 @@ export function decodeSave(raw,nodes,sample,expanded=false){
   return s;
 }
 export class SurvivalState {
-  constructor(nodes,sample,saved){this.nodes=nodes;this.sample=sample;this.state=saved||freshState();this.state.trees??={};this.state.vitals.oxygen??=100;for(const k in ITEMS)this.state.inventory[k]??=0;migrateInventory(this.state,ITEMS);this.revision=0;}
+  constructor(nodes,sample,saved){this.nodes=nodes;this.sample=sample;this.state=saved||freshState();this.state.trees??={};this.state.angered??={};this.state.vitals.oxygen??=100;for(const k in ITEMS)this.state.inventory[k]??=0;migrateInventory(this.state,ITEMS);this.revision=0;}
   changed(){syncHotbar(this.state);this.revision++;}
   available(node){const v=this.state.depleted[node.id];return v!==true&&!(Number.isFinite(v)&&v>this.state.elapsed);}
   canAfford(cost){return Object.entries(cost).every(([k,n])=>this.state.inventory[k]>=n);}
@@ -247,6 +248,7 @@ export class SurvivalState {
   }
   tick(dt,active,environment={}){
     if(!active)return null;dt=clamp(dt,0,.25);const s=this.state;s.elapsed+=dt;
+    for(const [id,until] of Object.entries(s.angered||{}))if(!Number.isFinite(until)||until<=s.elapsed)delete s.angered[id];
     this.hazardFeedback=updateHazards(s.vitals,dt,environment);
     for(const t of Object.values(s.trees))if(t.phase==='falling'&&s.elapsed-t.fallStart>=FALL_SECONDS){t.phase='fallen';this.changed();}
     s.vitals.food=Math.max(0,s.vitals.food-dt*.035);s.vitals.water=Math.max(0,s.vitals.water-dt*.055);
