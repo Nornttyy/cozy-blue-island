@@ -1,3 +1,3 @@
 const illustrated=new Set(['wood','stone','fiber','axe','berry','coconut','shell','meal','rope','plank','pickaxe','flint','clay','herb','bandage','mushroom','roast','flask','water','torch']);
-const expedition=new Set(['spear','bow','ironaxe','ironpick','leathervest','ironore','copperore','salt','fish','meat','boat']);
-export const itemIcon=id=>illustrated.has(id)||expedition.has(id)?`<img class="item-art" src="./assets/icons-${expedition.has(id)?17:16}/${id}.png" alt="" aria-hidden="true" draggable="false" width="64" height="64" decoding="async">`:`<svg aria-hidden="true"><use href="#i-${id}"/></svg>`;
+const generated21=new Set(['spear','bow','ironaxe','ironpick','leathervest','ironore','copperore','salt','fish','meat','boat','iron','copper','arrow','hide','cookedfish','cookedmeat','saltmeat','compass','fire','shelter','bench']);
+export const itemIcon=id=>illustrated.has(id)||generated21.has(id)?`<img class="item-art" src="./assets/icons-${generated21.has(id)?21:16}/${id}.png" alt="" aria-hidden="true" draggable="false" width="64" height="64" decoding="async">`:`<svg aria-hidden="true"><use href="#i-${id}"/></svg>`;

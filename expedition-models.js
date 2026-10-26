@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 let library;
+export function mergeRefinements(base,refined){for(const child of [...refined.children]){const previous=base.getObjectByName(child.name);previous?.removeFromParent();base.add(child);}}
 export function installExpeditionModels(root){
  library=root;
  // Wind uses asset-space height. Imported batches must not each bend around

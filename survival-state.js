@@ -49,6 +49,10 @@ Object.assign(RECIPES,{
 });
 Object.assign(NODE_TYPES,{ironore:{name:'铁矿脉',yield:{ironore:3,stone:1},tool:'pickaxe'},copperore:{name:'铜矿脉',yield:{copperore:3},tool:'pickaxe'},salt:{name:'盐晶',yield:{salt:3}}});
 export const matchesTool=(held,required)=>held===required||ITEMS[held]?.tool===required;
+// Every inventory entry has its own illustration, including refined/cooked goods.
+for(const [id,item] of Object.entries(ITEMS))item.icon=id;
+for(const [id,recipe] of Object.entries(RECIPES))recipe.icon=id;
+export const dismantleRefund=type=>Object.fromEntries(Object.entries(RECIPES[type]?.cost||{}).map(([id,n])=>[id,Math.floor(n*.75)]).filter(([,n])=>n>0));
 export const GOALS=[
   ['gather','收集岸边材料','靠近枯枝、石堆和长叶草，点击左键采集。'],
   ['axe','做一把石斧','按 B 制作石斧，再用绑定的快捷键装备。'],
@@ -95,13 +99,15 @@ export function decodeSave(raw,nodes,sample,expanded=false){
   if(expanded)for(const [id,t]of Object.entries(data.trees||{}))if(/^c-?\d+,-?\d+:\d+$/.test(id)&&t&&['standing','falling','fallen'].includes(t.phase))s.trees[id]={phase:t.phase,hits:Math.floor(clamp(t.hits,0,t.phase==='standing'?TREE_HITS-1:LOG_HITS-1)),yaw:clamp(t.yaw,-7,7),fallStart:clamp(t.fallStart,0,s.elapsed)};
   for(const b of (Array.isArray(data.buildings)?data.buildings:[]).slice(0,expanded?256:12)){
     if(!RECIPES[b.type]?.build||!Number.isFinite(b.x)||!Number.isFinite(b.z)||Math.hypot(b.x,b.z)>(expanded?1e7:35)||(b.type!=='boat'&&sample(b.x,b.z)<.45))continue;
-    s.buildings.push({id:`b${s.buildings.length}`,type:b.type,x:b.x,z:b.z,y:b.type==='boat'?-.19:sample(b.x,b.z),yaw:clamp(b.yaw,-100,100)});
+    const id=/^b\d{1,9}$/.test(b.id)&&!s.buildings.some(v=>v.id===b.id)?b.id:`b${Math.max(-1,...s.buildings.map(v=>Number(v.id.slice(1))))+1}`;
+    s.buildings.push({id,type:b.type,x:b.x,z:b.z,y:b.type==='boat'?-.19:sample(b.x,b.z),yaw:clamp(b.yaw,-100,100)});
   }
   for(const [id] of GOALS)s.goals[id]=data.goals?.[id]===true;
   const p=data.position;
   if(p&&Number.isFinite(p.x)&&Number.isFinite(p.z)&&Math.hypot(p.x,p.z)<(expanded?1e7:61)&&sample(p.x,p.z)>.1)s.position={x:p.x,z:p.z,yaw:clamp(p.yaw,-100,100)};
   s.drops=(Array.isArray(data.drops)?data.drops:[]).filter(d=>ITEMS[d.item]&&Number.isInteger(d.count)&&d.count>0&&d.count<=50&&Number.isFinite(d.x)&&Number.isFinite(d.z)&&/^drop\d+$/.test(d.id)).slice(0,128).map(d=>({...d,y:sample(d.x,d.z)}));s.nextDrop=Math.max(0,...s.drops.map(d=>Number(d.id.slice(4))+1));
   s.camp=s.buildings.find(b=>b.type==='shelter'&&b.id===data.camp)?.id||null;
+  s.nextBuilding=Math.max(Math.floor(clamp(data.nextBuilding,0,1e9)),0,...s.buildings.map(b=>Number(b.id.slice(1))+1));
   return s;
 }
 export class SurvivalState {
@@ -187,9 +193,21 @@ export class SurvivalState {
   build(type,x,z,yaw,p){
     const reason=this.placement(type,x,z,p);if(reason)return {ok:false,message:reason};
     this.spend(RECIPES[type].cost);
-    const b={id:`b${this.state.buildings.length}`,type,x,z,y:type==='boat'?-.19:this.sample(x,z),yaw:Number.isFinite(yaw)?yaw:0};
+    this.state.nextBuilding=Math.max(this.state.nextBuilding||0,0,...this.state.buildings.map(b=>Number(b.id.slice(1))+1));
+    const b={id:`b${this.state.nextBuilding++}`,type,x,z,y:type==='boat'?-.19:this.sample(x,z),yaw:Number.isFinite(yaw)?yaw:0};
     this.state.buildings.push(b);this.state.goals[type]=true;if(type==='shelter')this.state.camp=b.id;this.changed();
     return {ok:true,message:`${RECIPES[type].name}建好了`,building:b};
+  }
+  dismantle(id,p){
+    const s=this.state,b=s.buildings.find(v=>v.id===id);
+    if(!b)return {ok:false,message:'这处设施已经不存在了'};
+    if(!p||![p.x,p.z,p.feet].every(Number.isFinite)||Math.hypot(p.x-b.x,p.z-b.z)>3||Math.abs(p.feet-b.y)>1.9)return {ok:false,message:'需要靠近要拆除的设施'};
+    if(b.owner||p.vehicle===id)return {ok:false,message:'船上有人，先停泊离船再拆除'};
+    const refund=dismantleRefund(b.type);
+    if(!this.canFit(refund))return {ok:false,message:'背包装不下返还材料，请先腾出空间'};
+    if(!this.add(refund))return {ok:false,message:'材料无法放入背包，设施已保留'};
+    s.buildings=s.buildings.filter(v=>v.id!==id);if(s.camp===id)s.camp=null;this.changed();
+    return {ok:true,message:`已拆除${RECIPES[b.type].name} · `+Object.entries(refund).map(([k,n])=>`${ITEMS[k].name} +${n}`).join(' · '),refund};
   }
   eat(id){
     const item=ITEMS[id],s=this.state;if(!(item?.food||item?.water||item?.health)||s.inventory[id]<1)return {ok:false,message:'没有可使用的消耗品'};

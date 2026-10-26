@@ -33,7 +33,11 @@ function nodeModel(n,assets){
   if(['herb','mushroom','flint','clay','drop'].includes(n.type))g.add(extraModel(n.type));
   if(['ironore','copperore','salt'].includes(n.type))g.add(expeditionModel({ironore:'IronOre',copperore:'CopperOre',salt:'Salt'}[n.type]));
   if(n.type==='tree'){
-    const stump=assets.getObjectByName('Stump').clone(true),pivot=new THREE.Group(),body=[2,5].includes(n.biome)?expeditionModel('Pine'):[1,4].includes(n.biome)?expeditionModel('Broadleaf'):assets.getObjectByName('Palm').clone(true);
+    const species=[2,5].includes(n.biome)?'Pine':[1,4].includes(n.biome)?'Broadleaf':null;
+    const stump=species?expeditionModel(species+'Stump'):assets.getObjectByName('Stump').clone(true),pivot=new THREE.Group(),body=new THREE.Group();
+    const trunk=species?expeditionModel(species):assets.getObjectByName('Palm').clone(true);
+    if(species)trunk.position.y=-.28;
+    body.add(trunk);body.name=(species||'Palm')+'_CutPivot';
     pivot.position.y=.28;pivot.add(body);g.add(stump,pivot);g.userData={pivot,body};
   }
   g.position.set(n.x,n.y,n.z);return g;
