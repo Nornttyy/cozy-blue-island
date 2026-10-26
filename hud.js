@@ -3,6 +3,8 @@ import {pointerLockMessage} from './pointer-lock.js';
 import {ITEMS,GOALS} from './survival-state.js';
 import {readWorlds,makeWorld,selectWorld} from './world-seed.js';
 import {inventoryHTML,craftHTML,journalHTML} from './survival-panels.js';
+import {HOTBAR_SIZE} from './inventory.js';
+import {createInventoryUI} from './inventory-ui.js';
 const $=id=>document.getElementById(id);
 import {itemIcon as icon} from './item-icons.js';
 const PREFS_KEY='cozy-island-interface-v1';
@@ -12,17 +14,18 @@ export function createHUD(player,{setWaves,survival}){
   let prefs;
   try{prefs=cleanPreferences(JSON.parse(localStorage.getItem(PREFS_KEY)||'{}'));}catch{prefs=cleanPreferences();}
   const journal=new ExplorationJournal(),panel=$('field-panel');
-  document.querySelector('.equipped-label small').textContent='1–8 / 滚轮切换 · 0 空手';
+  document.querySelector('.equipped-label small').textContent='1–9 / 滚轮 · E 背包';
   let panelPage=null,returnToPlay=false,started=survival.hasSave,titleScreen=true,enabled=false,lastTick=0,toastTimer,selected=survival.selected,bagSelected=0;
+  const inventoryUI=createInventoryUI({panel,survival,active:()=>panel.open&&panelPage==='inventory',refresh:()=>renderPanel(),choose:i=>{bagSelected=i;}});
   const bearings=Array.from({length:24},(_,i)=>{const el=document.createElement('span');el.className='bearing'+(i%3===0?' major':'');el.textContent=i%3===0?['北','东北','东','东南','南','西南','西','西北'][i/3]:'·';$('compass-ticks').append(el);return el;});
-  const slots=Array.from({length:8},(_,i)=>{
+  const slots=Array.from({length:HOTBAR_SIZE},(_,i)=>{
     const button=document.createElement('button');button.type='button';button.className='quick-slot';
     button.innerHTML=`<kbd>${i+1}</kbd>${i===0?icon('hand'):'<span class="empty-slot">·</span>'}`;
     button.setAttribute('aria-label',`快捷栏 ${i+1}：${i===0?'空手':'空格位'}`);
     button.addEventListener('click',()=>select(i,true));$('hotbar').append(button);return button;
   });
-  function select(index,notify=false){selected=index;survival.select(index);updateSlots();const id=survival.game.state.hotbar[index];if(notify&&id!=='hand'&&!survival.game.state.inventory[id])toast('背包中没有'+ITEMS[id].name+' · B 制作或重新绑定');}
-  function updateSlots(){const s=survival.game.state,inv=s.inventory;slots.forEach((el,i)=>{const id=s.hotbar[i],item=ITEMS[id];el.classList.toggle('selected',i===selected);el.classList.toggle('unavailable',id!=='hand'&&!inv[id]);el.setAttribute('aria-pressed',String(i===selected));el.setAttribute('aria-label',`快捷栏 ${i+1}：${item?.name||'空手'}${item?'，'+inv[id]:''}`);el.innerHTML=`<kbd>${i+1}</kbd>${icon(item?.icon||'hand')}${item?'<small class="slot-count">'+inv[id]+'</small>':''}`;});const item=ITEMS[s.hotbar[selected]];$('equipped-name').textContent=item?item.name+(item.food||item.water||item.health?' · 左键使用':''):'空手 · 左键拾取';}
+  function select(index){selected=index;survival.select(index);updateSlots();}
+  function updateSlots(){const bag=survival.game.bag();slots.forEach((el,i)=>{const stack=bag[i],item=ITEMS[stack?.id];el.classList.toggle('selected',i===selected);el.classList.remove('unavailable');el.setAttribute('aria-pressed',String(i===selected));el.setAttribute('aria-label',`快捷栏 ${i+1}：${item?.name||'空手'}${item?'，'+stack.count:''}`);el.innerHTML=`<kbd>${i+1}</kbd>${item?icon(stack.id):''}${stack?.count>1?'<small class="slot-count">'+stack.count+'</small>':''}`;});const item=ITEMS[bag[selected]?.id];$('equipped-name').textContent=item?item.name+(item.food||item.water||item.health?' · 左键使用':bag[selected].id==='bow'?' · 按住拉弓，松手射出':''):'空手 · 左键拾取';}
   function toast(text){clearTimeout(toastTimer);$('hud-toast').textContent=text;$('hud-toast').classList.add('show');if(panel.open)$('panel-footer-note').textContent=text;toastTimer=setTimeout(()=>$('hud-toast').classList.remove('show'),3200);}
   function applyPreferences(save=false){
     document.body.classList.toggle('hidden-guidance',!prefs.guidance);document.body.classList.toggle('reduced-motion',prefs.reducedMotion);
@@ -51,14 +54,16 @@ export function createHUD(player,{setWaves,survival}){
   function begin(){started=true;titleScreen=false;player.begin();}
   function open(page){
     if(!enabled)return;
+    inventoryUI.cancel();
     if(!panel.open){returnToPlay=player.getState().active;panel.showModal();}
-    player.pause();panelPage=page;renderPanel();sync();
+    player.pause();panelPage=page;renderPanel();$('panel-content').scrollTop=0;sync();
   }
-  function close(resume=returnToPlay){panel.close();panelPage=null;if(resume)begin();else{sync();$(titleScreen?'title-start':'enter-island').focus();}}
+  function close(resume=returnToPlay){panel.close();panelPage=null;inventoryUI.cancel();if(resume)begin();else{sync();$(titleScreen?'title-start':'enter-island').focus();}}
   function renderPanel(){
-    const titles={inventory:'背包与制作',craft:'营地制作',map:'海域地图',worlds:'我的世界',journal:'海岛手账',settings:'游戏设置',guide:'操作指南'};
-    panel.classList.toggle('title-settings-panel',titleScreen);
-    $('panel-resume').innerHTML=(titleScreen?'返回主菜单':'返回小岛')+icon('arrow');
+    const titles={inventory:'随身行囊',craft:'营地制作',map:'海域地图',worlds:'我的世界',journal:'海岛手账',settings:'游戏设置',guide:'操作指南'};
+    panel.classList.toggle('inventory-panel',panelPage==='inventory');
+    panel.classList.toggle('title-settings-panel',titleScreen&&['settings','guide','worlds'].includes(panelPage));
+    $('panel-resume').innerHTML=(titleScreen?'返回主菜单':'返回小岛')+'<svg aria-hidden="true"><use href="#i-arrow"/></svg>';
     $('panel-title').textContent=titles[panelPage];document.querySelectorAll('[data-tab]').forEach(el=>el.setAttribute('aria-current',String(el.dataset.tab===panelPage)));
     $('panel-footer-note').textContent=survival.saveState;
     if(panelPage==='worlds'){
@@ -67,7 +72,7 @@ export function createHUD(player,{setWaves,survival}){
       $('panel-content').querySelector('[data-new-world]').textContent='创建远航世界 · 六种群系';
       $('panel-content').querySelector('.world-note').append(document.createTextNode(' 旧世界保留原地形；新世界使用更远的群岛与更明显的山丘。'));
     }else if(panelPage==='inventory'){
-      $('panel-content').innerHTML=inventoryHTML(survival,player,bagSelected);
+      $('panel-content').innerHTML=inventoryHTML(survival,player,bagSelected,inventoryUI.cursor.carry,inventoryUI.cursor.pending);inventoryUI.paint();
     }else if(panelPage==='craft'){
       $('panel-content').innerHTML=craftHTML(survival,player);
     }else if(panelPage==='map'){
@@ -76,8 +81,8 @@ export function createHUD(player,{setWaves,survival}){
     }else if(panelPage==='journal'){
       $('panel-content').innerHTML=journalHTML(survival);
     }else if(panelPage==='guide'){
-      $('panel-content').innerHTML=`<div class="guide-grid"><div class="guide-row"><span>移动 / 加速</span><span><kbd>WASD</kbd> / <kbd>Shift</kbd></span></div><div class="guide-row"><span>观察四周</span><span>移动鼠标，无需按住</span></div><div class="guide-row"><span>采集 / 喝水 / 砍树</span><span>靠近并点击 <kbd>左键</kbd></span></div><div class="guide-row"><span>背包与制作 / 地图 / 手账</span><span><kbd>B</kbd> / <kbd>M</kbd> / <kbd>J</kbd></span></div><div class="guide-row"><span>切换物品 / 空手</span><span><kbd>1–8</kbd> 或滚轮 / <kbd>0</kbd></span></div><div class="guide-row"><span>使用消耗品 / 放下一个</span><span><kbd>左键</kbd> 或 <kbd>F</kbd> / <kbd>Q</kbd></span></div><div class="guide-row"><span>放置建筑 / 取消建造</span><span><kbd>左键</kbd> / <kbd>右键</kbd></span></div><div class="guide-row"><span>跳跃、上浮 / 下潜</span><span><kbd>Space</kbd> / <kbd>C</kbd></span></div><div class="guide-row"><span>暂停</span><kbd>Esc</kbd></div></div><p class="guide-note">先捡枯枝、石块和长叶草，做一把石斧。挥斧砍倒树，等树落地后再劈成木材。背包支持拖动、Shift 点击拆半和快捷栏绑定。制作工作台后可以做石镐，开采燧石和黏土。暂停不会消耗状态；在陆地自动存档，潜水退出后会从最近的陆地位置继续。当前采用电脑键鼠操作。</p>`;
-      $('panel-content').insertAdjacentHTML('beforeend','<p class="guide-note">远航：在浅海放置双桨木船，靠近左键登船。W/S 前后划行，A/D 转船，鼠标环顾，空格离船。工作台可制作弓、铁制工具与皮甲；猎矛可捕鱼、狩猎，弓需要箭矢。皮甲在背包中自动生效。罗盘会标出邻岛方向。合作房间共享物资、营地和昼夜天气，保留 24 小时，个人暂停不暂停其他人的世界。</p>');
+      $('panel-content').innerHTML=`<div class="guide-grid"><div class="guide-row"><span>移动 / 加速</span><span><kbd>WASD</kbd> / <kbd>Shift</kbd></span></div><div class="guide-row"><span>观察四周</span><span>移动鼠标，无需按住</span></div><div class="guide-row"><span>采集 / 喝水 / 砍树</span><span>靠近并点击 <kbd>左键</kbd></span></div><div class="guide-row"><span>背包与制作 / 地图 / 手账</span><span><kbd>E / B</kbd> / <kbd>M</kbd> / <kbd>J</kbd></span></div><div class="guide-row"><span>切换物品 / 选择空格</span><span><kbd>1–9</kbd> 或滚轮 / <kbd>0</kbd></span></div><div class="guide-row"><span>使用消耗品 / 放下一个</span><span><kbd>左键</kbd> 或 <kbd>F</kbd> / <kbd>Q</kbd></span></div><div class="guide-row"><span>放置建筑 / 取消建造</span><span><kbd>左键</kbd> / <kbd>右键</kbd></span></div><div class="guide-row"><span>跳跃、上浮 / 下潜</span><span><kbd>Space</kbd> / <kbd>C</kbd></span></div><div class="guide-row"><span>暂停</span><kbd>Esc</kbd></div></div><p class="guide-note">先捡枯枝、石块和长叶草，做一把石斧。挥斧砍倒树，等树落地后再劈成木材。背包支持拖动、右键拆半、Shift 点击快速转移和九格快捷栏。制作工作台后可以做石镐，开采燧石和黏土。暂停不会消耗状态；在陆地自动存档，潜水退出后会从最近的陆地位置继续。当前采用电脑键鼠操作。</p>`;
+      $('panel-content').insertAdjacentHTML('beforeend','<p class="guide-note">远航：在浅海放置双桨木船，靠近左键登船。W/S 前后划行，A/D 转船，鼠标环顾，空格离船。工作台可制作弓、铁制工具与皮甲；猎矛可捕鱼、狩猎，弓需要箭矢；按住左键蓄力、松手射出，右键取消。箭会下坠，远处目标要稍抬高准星。皮甲在背包中自动生效。罗盘会标出邻岛方向。合作房间共享物资、营地和昼夜天气，保留 24 小时，个人暂停不暂停其他人的世界。</p>');
     }else{
       $('panel-content').innerHTML=`<label class="setting-row"><span>探索提示<small>显示手账目标与底部操作说明</small></span><input id="setting-guidance" type="checkbox" ${prefs.guidance?'checked':''}></label><label class="setting-row"><span>减少界面动效<small>保留清晰反馈，关闭面板过渡动画</small></span><input id="setting-reduced" type="checkbox" ${prefs.reducedMotion?'checked':''}></label><label class="setting-row"><span>海浪流动<small>控制海面、泡沫与水下光斑的动态</small></span><input id="setting-waves" type="checkbox" ${prefs.waves?'checked':''}></label><label class="setting-row"><span>转头灵敏度<small>鼠标自由转头</small></span><span class="setting-value"><output id="sensitivity-value">${prefs.sensitivity.toFixed(1)}×</output><br><input id="setting-sensitivity" aria-label="转头灵敏度" type="range" min="0.5" max="2" step="0.1" value="${prefs.sensitivity}"></span></label><div class="safety-actions"><button id="home" class="secondary">回到草地起点</button><button id="shore" class="secondary">前往海边体验</button></div><p class="settings-note">若卡在地形中，可返回起点。进度自动保存在本机；暂停不会消耗状态，返回起点不会清空物资。</p>`;
       $('panel-content').querySelector('.settings-note').textContent='进度自动保存在当前浏览器。清除网站数据会丢失存档；回到起点不会清除物品与已建营地。';
@@ -123,7 +128,7 @@ export function createHUD(player,{setWaves,survival}){
     $('next-goal').textContent=GOALS.find(([id])=>!goals[id])?.[1]||'营地建成了，继续享受岛上生活';
   }
   document.querySelectorAll('[data-open]').forEach(el=>el.addEventListener('click',()=>open(el.dataset.open)));
-  document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{panelPage=el.dataset.tab;renderPanel();}));
+  document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{inventoryUI.cancel();panelPage=el.dataset.tab;renderPanel();$('panel-content').scrollTop=0;}));
   $('settings-open').addEventListener('click',()=>open('settings'));
   $('title-start').addEventListener('click',begin);
   $('title-settings').addEventListener('click',()=>open('settings'));
@@ -141,28 +146,26 @@ export function createHUD(player,{setWaves,survival}){
   $('goal-toggle').addEventListener('click',()=>{const collapsed=$('goal-toggle').getAttribute('aria-expanded')==='true';$('goal-toggle').setAttribute('aria-expanded',String(!collapsed));$('goal-detail').hidden=collapsed;});
   window.addEventListener('island:activity',sync);window.addEventListener('island:relocated',()=>journal.relocate());
   window.addEventListener('island:notice',e=>toast(e.detail));
-  window.addEventListener('island:inventory',()=>{updateSlots();if(panel.open&&['inventory','craft'].includes(panelPage))renderPanel();});
+  window.addEventListener('island:inventory',()=>{updateSlots();inventoryUI.cursor.validate();if(panel.open&&['inventory','craft'].includes(panelPage))renderPanel();});
   window.addEventListener('island:craft-open',()=>open('craft'));
-  function splitSlot(index){const bag=survival.game.bag(),empty=bag.findIndex(s=>!s);if(empty<0){toast('没有空格可拆分');return;}survival.move(index,empty,true);}
   $('panel-content').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;
-    if(b.dataset.slot!==undefined){const i=Number(b.dataset.slot);if(e.shiftKey)splitSlot(i);else if(!survival.game.bag()[i]&&survival.game.bag()[bagSelected]){survival.move(bagSelected,i,false);bagSelected=i;renderPanel();}else{bagSelected=i;renderPanel();}}
-    if(b.dataset.sort)survival.sort();if(b.dataset.hand){survival.bind('hand',0);select(0);}
-    if(b.dataset.bind)survival.bind(b.dataset.bind,Number(b.dataset.index));if(b.dataset.split!==undefined)splitSlot(Number(b.dataset.split));if(b.dataset.drop!==undefined)survival.drop(Number(b.dataset.drop));
-    if(b.dataset.eat)survival.eat(b.dataset.eat);if(b.dataset.craft)survival.craft(b.dataset.craft);if(b.dataset.build){survival.startBuild(b.dataset.build);close(true);}
+    if(b.dataset.sort&&!inventoryUI.cursor.pending&&!inventoryUI.cursor.carry)survival.sort();
+    if(b.dataset.slot!==undefined)return;
+    if(inventoryUI.cursor.pending||inventoryUI.cursor.carry){toast('先把手中的物品放回格子');return;}
+    if(b.dataset.eat)survival.eat(b.dataset.eat,Number(b.dataset.index));if(b.dataset.craft)survival.craft(b.dataset.craft);if(b.dataset.build){survival.startBuild(b.dataset.build);close(true);}
     if(b.dataset.newWorld||b.dataset.loadWorld){try{survival.save();if(b.dataset.newWorld)makeWorld(localStorage,$('world-seed').value);else selectWorld(localStorage,b.dataset.loadWorld);location.reload();}catch(error){toast(error.message);}}
   });
-  $('panel-content').addEventListener('dragstart',e=>{const b=e.target.closest('[data-slot]');if(b){e.dataTransfer.setData('text/plain',b.dataset.slot);e.dataTransfer.effectAllowed='move';}});
-  $('panel-content').addEventListener('dragover',e=>{if(e.target.closest('[data-slot]'))e.preventDefault();});
-  $('panel-content').addEventListener('drop',e=>{const b=e.target.closest('[data-slot]');if(!b)return;e.preventDefault();const text=e.dataTransfer.getData('text/plain');if(/^\d+$/.test(text))survival.move(Number(text),Number(b.dataset.slot),e.shiftKey);});
-  document.addEventListener('wheel',e=>{if(player.getState().active&&!panel.open){e.preventDefault();select((selected+(e.deltaY>0?1:7))%8);}}, {passive:false});
+  let lastWheel=-Infinity;
+  document.addEventListener('wheel',e=>{if(player.getState().active&&!panel.open&&e.deltaY){e.preventDefault();const now=performance.now();if(now-lastWheel<70)return;lastWheel=now;select((selected+(e.deltaY>0?1:HOTBAR_SIZE-1))%HOTBAR_SIZE);}}, {passive:false});
   document.addEventListener('keydown',e=>{
     if(!enabled||e.repeat||e.ctrlKey||e.metaKey||e.altKey)return;
     if(e.target instanceof HTMLInputElement||e.target instanceof HTMLTextAreaElement)return;
-    if(titleScreen)return;
-    const page={KeyB:'inventory',KeyI:'inventory',KeyM:'map',KeyJ:'journal'}[e.code];
+    if(inventoryUI.keydown(e))return;
+    if(titleScreen&&!panel.open)return;
+    const page={KeyE:'inventory',KeyB:'inventory',KeyI:'inventory',KeyM:'map',KeyJ:'journal'}[e.code];
     if(page){e.preventDefault();if(panel.open&&panelPage===page)close();else open(page);}
-    if(!panel.open&&player.getState().active&&/^Digit[1-8]$/.test(e.code)){e.preventDefault();select(Number(e.code.slice(-1))-1,true);}
-    if(!panel.open&&player.getState().active&&e.code==='Digit0'){e.preventDefault();survival.bind('hand',0);select(0);}
+    if(!panel.open&&player.getState().active&&/^Digit[1-9]$/.test(e.code)){e.preventDefault();select(Number(e.code.slice(-1))-1);}
+    if(!panel.open&&player.getState().active&&e.code==='Digit0'){e.preventDefault();const empty=survival.game.bag().slice(0,HOTBAR_SIZE).findIndex(s=>!s);if(empty>=0)select(empty);else toast('快捷栏已满，把一格移回背包就能空手');}
   });
   select(selected);applyPreferences();
   return {

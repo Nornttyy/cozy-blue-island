@@ -5,6 +5,7 @@ import {createAxeViewmodel,poseAxe} from './axe-viewmodel.js';
 import {createStonePickViewmodel,poseStonePick} from './stone-pick-viewmodel.js';
 import {extraModel} from './extra-models.js';
 import {CHUNK} from './world-seed.js';
+import {HOTBAR_SIZE} from './inventory.js';
 export const QUICK_ITEMS=['hand','axe','berry','coconut','meal','shell'];
 export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSample=player.sampleLand,options={}){
   const saveKey=options.saveKey||SAVE_KEY,math=options.world;
@@ -19,7 +20,7 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
     if(dropRevision!==game.revision){dropRevision=game.revision;nodes.splice(0,nodes.length,...baseNodes.filter(n=>n.type==='spring'||Math.hypot(n.x-s.x,n.z-s.z)<100),...cellNodes,...game.state.drops.filter(d=>Math.hypot(d.x-s.x,d.z-s.z)<90));world.sync();}
   }
   let selected=game.state.selected||0,attack=null,target=null,building=null,placement=null,lastSave=0,saveState=saved?'已读取本机存档':'本机自动存档',noticeOnce=false,extension=null,remoteAction=null;
-  const held=()=>game.state.hotbar[selected]||'hand';
+  const held=()=>game.bag()[selected]?.id||'hand';
   let dismantling=null;
   const prompt=document.getElementById('interaction'),label=document.getElementById('interaction-label'),caption=document.getElementById('interaction-caption'),bar=document.getElementById('interaction-progress');
   const notify=message=>window.dispatchEvent(new CustomEvent('island:notice',{detail:message}));
@@ -32,9 +33,9 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
   function result(r){if(r.pending)return r;if(r.ok){save();window.dispatchEvent(new Event('island:inventory'));}if(r.message)notify(r.message);return r;}
   function impact(kind,r){if(r.ok&&['tree','harvest','hunt'].includes(kind))document.getElementById('reticle')?.animate?.([{boxShadow:'0 0 0 1px #fff9',background:'#fffefa'},{boxShadow:'0 0 0 8px #fff0',background:'#fff7'}],{duration:190,easing:'ease-out'});return r;}
   function execute(kind,args,local){if(remoteAction){remoteAction(kind,args).then(r=>result(impact(kind,r))).catch(e=>notify(e.message));return {ok:false,pending:true,message:'同步中'};}return impact(kind,local());}
-  const useItem=id=>result(execute('eat',{id},()=>game.eat(id)));
+  const useItem=(id,index=game.bag()[selected]?.id===id?selected:undefined)=>result(execute('eat',{id,index},()=>game.eat(id,index)));
   const putDown=index=>result(execute('drop',{index},()=>game.drop(index,player.getState())));
-  function select(i){selected=Math.max(0,Math.min(7,i));game.state.selected=selected;attack=null;}
+  function select(i){selected=Math.max(0,Math.min(HOTBAR_SIZE-1,i));game.state.selected=selected;attack=null;window.dispatchEvent(new Event('island:tool-change'));}
   function cancelBuild(){building=null;placement=null;attack=null;world.preview(null);}
   function startBuild(type){building=type;attack=null;notify('绿色可以放置 · 左键确认，右键取消 · 材料在确认后扣除');}
   function action(){
@@ -46,7 +47,7 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
     if(!target)return;
     if(target.type==='drop'){if(remoteAction){execute('pickup',{id:target.id},()=>{});return;}if(!game.canFit({[target.item]:target.count})){notify('背包已满，先腾出格子');return;}game.add({[target.item]:target.count});game.state.drops=game.state.drops.filter(d=>d.id!==target.id);result({ok:true,message:'捡回了 '+ITEMS[target.item].name});return;}
     const node=target.source||target,rule=NODE_TYPES[node.type];
-    if(rule.tool&&(!matchesTool(held(),rule.tool)||!game.state.inventory[held()])){notify('需要装备'+ITEMS[rule.tool].name+' · B 背包绑定快捷键');return;}
+    if(rule.tool&&(!matchesTool(held(),rule.tool)||!game.state.inventory[held()])){notify('需要装备'+ITEMS[rule.tool].name+' · E 背包，把工具放入下方快捷栏');return;}
     if(node.type==='tree'&&game.treeStage(node).phase==='falling')return;
     attack={node,age:0,hit:false,duration:held()==='ironaxe'?.56:matchesTool(held(),'pickaxe')?.64:node.type==='tree'?.62:.48,tool:held()};
   }
@@ -56,7 +57,7 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
   document.addEventListener('keydown',e=>{
     if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||!player.getState().active)return;
     if(e.code==='KeyF'){e.preventDefault();useItem(held());}
-    if(e.code==='KeyQ'){e.preventDefault();putDown(game.bag().findIndex(s=>s?.id===held()));}
+    if(e.code==='KeyQ'){e.preventDefault();putDown(selected);}
     if(e.code==='KeyR'){e.preventDefault();if(building)cancel();else if(target?.building&&!attack)dismantling={id:target.id,age:0};}
   });
   document.addEventListener('keyup',e=>{if(e.code==='KeyR')dismantling=null;});
@@ -80,9 +81,11 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
   return {
     game,select,startBuild,save,held,notify,execute,hasSave:!!saved,springModel:world.spring,world:options.descriptor,
     setExtension(value){extension=value;},setRemote(value){remoteAction=value;},get networked(){return !!remoteAction;},
-    applyShared(state){for(const key of ['inventory','bag','depleted','trees','buildings','drops','nextDrop','nextBuilding','camp','goals','wildlife'])if(state[key]!==undefined)game.state[key]=structuredClone(state[key]);game.state.elapsed=state.elapsed;game.changed();world.sync();window.dispatchEvent(new Event('island:inventory'));},
+    applyShared(state){for(const key of ['inventory','bag','inventoryVersion','depleted','trees','buildings','drops','nextDrop','nextBuilding','camp','goals','wildlife','arrows','nextArrow'])if(state[key]!==undefined)game.state[key]=structuredClone(state[key]);game.state.elapsed=state.elapsed;game.bag();game.changed();world.sync();window.dispatchEvent(new Event('island:inventory'));},
     get swing(){return attack?attack.age/attack.duration:0;},
     bind:(id,i)=>result(game.bind(id,i)),move:(from,to,split)=>result(execute('move',{from,to,split},()=>game.rearrange(from,to,split))),sort:()=>result(execute('sort',{},()=>game.sortBag())),drop:putDown,
+    async requestAction(kind,args,local,pose){try{return result(remoteAction?await remoteAction(kind,args,pose):local());}catch(e){notify(e.message);return {ok:false,message:e.message};}},
+    async editInventory(kind,args){try{const local=()=>kind==='transfer'?game.transfer(args):game.quickMove(args.from,args.expected);return result(remoteAction?await remoteAction(kind,args):local());}catch(e){notify(e.message);return {ok:false,message:e.message};}},
     updateWind:time=>world.updateWind(time),
     get selected(){return selected;},get saveState(){return remoteAction?'合作房间保存 · 与本机存档分开':saveBlocked?'仅本次游玩 · 未存档':saveState;},
     eat:useItem,craft:id=>{const r=execute('craft',{id},()=>game.craft(id,player.getState()));return r.pending?r:result(r);},
@@ -132,7 +135,7 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
             if(target.type==='tree'){
               const t=game.treeStage(target),fallen=t.phase==='fallen';progress=t.hits/(fallen?LOG_HITS:TREE_HITS);
               label.textContent=fallen?'倒下的树干':t.phase==='falling'?'树正在倒下':[2,5].includes(target.biome)?'松树':[1,4].includes(target.biome)?'阔叶树':'棕榈树';
-              caption.textContent=locked?'需要石斧 · B 制作并绑定快捷栏':t.phase==='falling'?'等落地后，再劈成木材':fallen?'左键劈木 · '+t.hits+'/'+LOG_HITS:'左键挥斧 · '+t.hits+'/'+TREE_HITS;
+              caption.textContent=locked?'需要石斧 · E 制作，放入快捷栏':t.phase==='falling'?'等落地后，再劈成木材':fallen?'左键劈木 · '+t.hits+'/'+LOG_HITS:'左键挥斧 · '+t.hits+'/'+TREE_HITS;
             }else progress=attack?.node.id===target.id?Math.min(1,phase/.45):0;
           }
         }

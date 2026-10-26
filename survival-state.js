@@ -1,5 +1,5 @@
 // Pure survival rules: rendering and input never mutate inventory directly.
-import {BAG_SIZE,defaultHotbar,packCounts,totals,validBag,transaction,moveStack} from './inventory.js';
+import {BAG_SIZE,HOTBAR_SIZE,defaultHotbar,packCounts,totals,validBag,transaction,moveStack,migrateInventory,syncHotbar,transferStack,quickTransfer} from './inventory.js';
 export const SAVE_KEY='cozy-island-survival-v1';
 export const ITEMS={
   wood:{name:'木材',icon:'wood',note:'拾取枯枝，或砍倒树后劈开倒木。'},stone:{name:'石块',icon:'stone',note:'海岸上的石堆，采完不再刷新。'},
@@ -35,13 +35,13 @@ export const NODE_TYPES={
 Object.assign(ITEMS,{
  ironore:{name:'铁矿石',icon:'ironore',note:'山地与赤岩岛的矿脉；用石镐或铁镐开采。'},copperore:{name:'铜矿石',icon:'copperore',note:'丘陵和赤岩岛的矿脉。'},
  iron:{name:'铁锭',icon:'ironore',note:'在篝火旁冶炼铁矿，打造进阶工具。'},copper:{name:'铜锭',icon:'copperore',note:'用于制作航海罗盘。'},salt:{name:'海盐',icon:'salt',note:'赤岩岛盐块，可腌制肉食。'},
- spear:{name:'猎矛',icon:'spear',weapon:18,range:3.3,note:'点击刺击，可捕获鱼类和狩猎。'},bow:{name:'木弓',icon:'bow',weapon:24,range:24,note:'需要箭矢，瞄准生物左键射击。'},arrow:{name:'箭矢',icon:'spear',note:'木弓的弹药。'},
+ spear:{name:'猎矛',icon:'spear',weapon:18,range:3.3,note:'点击刺击，可捕获鱼类和狩猎。'},bow:{name:'木弓',icon:'bow',weapon:32,range:45,note:'按住左键蓄力，松手射出；拉得越满，箭越快、越远。右键取消。'},arrow:{name:'箭矢',icon:'spear',note:'木弓的弹药。'},
  ironaxe:{name:'铁斧',icon:'ironaxe',tool:'axe',weapon:24,range:2.8,note:'可砍树或防身。'},ironpick:{name:'铁镐',icon:'ironpick',tool:'pickaxe',note:'可开采所有矿石。'},
  hide:{name:'兽皮',icon:'leathervest',note:'狩猎野猪获得，用于制作皮甲。'},leathervest:{name:'皮甲',icon:'leathervest',armor:1,note:'制作后自动穿戴，受到野猪攻击时减伤 35%。'},
  fish:{name:'鲜鱼',icon:'fish',note:'使用猎矛或弓捕获，靠近篝火烤熟。'},meat:{name:'生肉',icon:'meat',note:'狩猎获得，烤熟后食用。'},cookedfish:{name:'烤鱼',icon:'fish',food:42,health:5,note:'饱食 +42 · 健康 +5'},cookedmeat:{name:'烤肉',icon:'meat',food:48,note:'饱食 +48'},saltmeat:{name:'腌肉',icon:'meat',food:65,note:'饱食 +65，适合远航。'},compass:{name:'航海罗盘',icon:'copperore',note:'持有时显示最近岛屿的方向与距离。'}
 });
 Object.assign(RECIPES,{
- spear:{name:'猎矛',icon:'spear',cost:{wood:4,flint:2,rope:1},note:'近战、捕鱼与狩猎。'},bow:{name:'木弓',icon:'bow',cost:{wood:6,rope:3},station:'bench',note:'射程 24 米，需要箭矢。'},arrow:{name:'箭矢',icon:'spear',cost:{wood:2,flint:1,fiber:1},amount:6,note:'制作六支箭。'},
+ spear:{name:'猎矛',icon:'spear',cost:{wood:4,flint:2,rope:1},note:'近战、捕鱼与狩猎。'},bow:{name:'木弓',icon:'bow',cost:{wood:6,rope:3},station:'bench',note:'蓄力木弓，带下坠的飞行箭矢；需要箭矢。'},arrow:{name:'箭矢',icon:'spear',cost:{wood:2,flint:1,fiber:1},amount:6,note:'制作六支箭。'},
  iron:{name:'冶炼铁锭',icon:'ironore',cost:{ironore:2,wood:3},station:'fire',note:'篝火冶炼：2 铁矿 + 3 木材。'},copper:{name:'冶炼铜锭',icon:'copperore',cost:{copperore:2,wood:2},station:'fire',note:'制作航海工具的原料。'},
  ironaxe:{name:'铁斧',icon:'ironaxe',cost:{iron:4,wood:3,rope:2},station:'bench',note:'更快挥砍的铁制工具。'},ironpick:{name:'铁镐',icon:'ironpick',cost:{iron:4,wood:3,rope:2},station:'bench',note:'铁制采矿工具。'},leathervest:{name:'皮甲',icon:'leathervest',cost:{hide:4,rope:3},station:'bench',note:'自动穿戴 · 受到攻击时减伤 35%。'},
  cookedfish:{name:'烤鱼',icon:'fish',cost:{fish:1,wood:1},station:'fire',note:'烹饪新鲜海鱼。'},cookedmeat:{name:'烤肉',icon:'meat',cost:{meat:1,wood:1},station:'fire',note:'烹饪狩猎所得。'},saltmeat:{name:'腌肉',icon:'meat',cost:{meat:2,salt:1},note:'航行补给。'},compass:{name:'航海罗盘',icon:'copperore',cost:{copper:3,iron:1},station:'bench',note:'显示离岸岛屿方位。'},
@@ -55,7 +55,7 @@ for(const [id,recipe] of Object.entries(RECIPES))recipe.icon=id;
 export const dismantleRefund=type=>Object.fromEntries(Object.entries(RECIPES[type]?.cost||{}).map(([id,n])=>[id,Math.floor(n*.75)]).filter(([,n])=>n>0));
 export const GOALS=[
   ['gather','收集岸边材料','靠近枯枝、石堆和长叶草，点击左键采集。'],
-  ['axe','做一把石斧','按 B 制作石斧，再用绑定的快捷键装备。'],
+  ['axe','做一把石斧','按 B 制作石斧，再放入下方快捷栏装备。'],
   ['fire','点亮第一处篝火','收集 6 木材、4 石块，在制作页放置篝火。'],
   ['shelter','搭好自己的叶棚','收集 8 木材、6 纤维，在平坦陆地搭建。'],
   ['meal','吃一顿热乎的饭','在海边捡鲜贝，靠近篝火制作并食用。']
@@ -63,7 +63,7 @@ export const GOALS=[
 const clamp=(n,a,b)=>Number.isFinite(n)?Math.max(a,Math.min(b,n)):a;
 export const TREE_HITS=4,LOG_HITS=3,FALL_SECONDS=1.4,TRUNK_LENGTH=3.45;
 export function segmentDistance(x,z,ax,az,bx,bz){const dx=bx-ax,dz=bz-az,t=clamp(((x-ax)*dx+(z-az)*dz)/(dx*dx+dz*dz||1),0,1);return Math.hypot(x-ax-t*dx,z-az-t*dz);}
-export function freshState(){return {version:1,inventory:Object.fromEntries(Object.keys(ITEMS).map(k=>[k,0])),bag:Array(BAG_SIZE).fill(null),hotbar:defaultHotbar(),selected:0,vitals:{health:100,food:78,water:72},elapsed:0,depleted:{},trees:{},wildlife:{},buildings:[],drops:[],nextDrop:0,goals:{},position:null,camp:null,restsAt:-120};}
+export function freshState(){return {version:1,inventoryVersion:2,inventory:Object.fromEntries(Object.keys(ITEMS).map(k=>[k,0])),bag:Array(BAG_SIZE).fill(null),hotbar:defaultHotbar(),selected:0,vitals:{health:100,food:78,water:72},elapsed:0,depleted:{},trees:{},wildlife:{},buildings:[],drops:[],nextDrop:0,goals:{},position:null,camp:null,restsAt:-120};}
 export function makeLayout(sample){
   const nodes=[];
   const add=(type,x,z)=>{const y=sample(x,z);if(!Number.isFinite(y)||y<.3)return false;if(nodes.some(n=>Math.hypot(n.x-x,n.z-z)<1.2))return false;nodes.push({id:`n${nodes.length}`,type,x,z,y});return true;};
@@ -85,8 +85,7 @@ export function decodeSave(raw,nodes,sample,expanded=false){
   if(!data||data.version!==1||!data.inventory||!data.vitals)throw new Error('Unrecognized save');
   const s=freshState();
   for(const k in ITEMS)s.inventory[k]=Math.floor(clamp(data.inventory[k],0,k==='axe'?1:999));
-  s.bag=validBag(data.bag,s.inventory,ITEMS)?data.bag.map(v=>v?{...v}:null):packCounts(s.inventory,BAG_SIZE,true);
-  s.hotbar=Array.from({length:8},(_,i)=>data.hotbar?.[i]==='hand'||ITEMS[data.hotbar?.[i]]?data.hotbar[i]:defaultHotbar()[i]);s.selected=Math.floor(clamp(data.selected,0,7));
+  s.bag=data.bag;s.hotbar=data.hotbar;s.inventoryVersion=data.inventoryVersion;migrateInventory(s,ITEMS);s.selected=Math.floor(clamp(data.selected,0,HOTBAR_SIZE-1));
   for(const k in s.vitals)s.vitals[k]=clamp(data.vitals[k],0,100);
   s.elapsed=clamp(data.elapsed,0,1e9);s.restsAt=clamp(data.restsAt??-120,-120,s.elapsed);
   s.wildlife={};for(const [id,hp]of Object.entries(data.wildlife||{}))if(/^a-?\d+,-?\d+:\d+$/.test(id)&&Number.isFinite(hp))s.wildlife[id]=clamp(hp,0,100);
@@ -111,17 +110,19 @@ export function decodeSave(raw,nodes,sample,expanded=false){
   return s;
 }
 export class SurvivalState {
-  constructor(nodes,sample,saved){this.nodes=nodes;this.sample=sample;this.state=saved||freshState();this.state.trees??={};this.revision=0;}
-  changed(){this.revision++;}
+  constructor(nodes,sample,saved){this.nodes=nodes;this.sample=sample;this.state=saved||freshState();this.state.trees??={};migrateInventory(this.state,ITEMS);this.revision=0;}
+  changed(){syncHotbar(this.state);this.revision++;}
   available(node){const v=this.state.depleted[node.id];return v!==true&&!(Number.isFinite(v)&&v>this.state.elapsed);}
   canAfford(cost){return Object.entries(cost).every(([k,n])=>this.state.inventory[k]>=n);}
-  spend(cost){const next=transaction(this.bag(),cost,{});if(!next)return false;this.state.bag=next;for(const [k,n] of Object.entries(cost))this.state.inventory[k]-=n;return true;}
-  bag(){const s=this.state;if(!validBag(s.bag,s.inventory,ITEMS))s.bag=packCounts(s.inventory,BAG_SIZE,true);return s.bag;}
+  spend(cost){const next=transaction(this.bag(),cost,{});if(!next)return false;this.state.bag=next;for(const [k,n] of Object.entries(cost))this.state.inventory[k]-=n;this.changed();return true;}
+  bag(){const s=this.state;if(!validBag(s.bag,s.inventory,ITEMS))s.bag=packCounts(s.inventory,BAG_SIZE,true);syncHotbar(s);return s.bag;}
   canFit(items,cost={}){return !!transaction(this.bag(),cost,items)&&Object.entries(items).every(([k,n])=>this.state.inventory[k]-(cost[k]||0)+n<=999);}
   add(items){if(!this.canFit(items))return false;const next=transaction(this.bag(),{},items);if(!next)return false;this.state.bag=next;for(const [k,n] of Object.entries(items))this.state.inventory[k]+=n;this.changed();return true;}
   rearrange(from,to,split){const ok=moveStack(this.bag(),from,to,split);if(ok)this.changed();return {ok,message:ok?'背包已整理':'无法移动到这里'};}
-  sortBag(){this.state.bag=packCounts(this.state.inventory,this.bag().length);this.changed();return {ok:true,message:'已合并同类物品'};}
-  bind(id,index){if(index<0||index>7||!(id==='hand'||ITEMS[id]))return {ok:false,message:'无效快捷栏'};this.state.hotbar[index]=id;this.changed();return {ok:true,message:`已绑定快捷键 ${index+1}`};}
+  transfer(args){const r=transferStack(this.bag(),args.from,args.to,args.count,args.expected,args.swap!==false);if(r.ok)this.changed();return r;}
+  quickMove(from,expected){const r=quickTransfer(this.bag(),from,expected);if(r.ok)this.changed();return r;}
+  sortBag(){const bag=this.bag(),main=totals(bag.slice(HOTBAR_SIZE)),sorted=Object.fromEntries(Object.entries(main).sort(([a],[b])=>a.localeCompare(b)));this.state.bag=[...bag.slice(0,HOTBAR_SIZE),...packCounts(sorted,bag.length-HOTBAR_SIZE,true)];this.changed();return {ok:true,message:'背包已整理，快捷栏位置保留'};}
+  bind(id,index){if(!Number.isInteger(index)||index<0||index>=HOTBAR_SIZE)return {ok:false,message:'无效快捷栏'};const bag=this.bag();if(id==='hand')return bag[index]?this.quickMove(index):{ok:true};const from=bag.findIndex(s=>s?.id===id);if(from<0)return {ok:false,message:'背包里没有这件物品'};if(from===index)return {ok:true};return this.transfer({from,to:index,count:bag[from].count});}
   drop(index,position){const bag=this.bag(),s=bag[index];if(!s)return {ok:false,message:'格子为空'};if(this.state.drops.length>=128)return {ok:false,message:'附近散落物品太多，请先收拾'};const id=s.id;s.count--;if(!s.count)bag[index]=null;this.state.inventory[id]--;this.state.drops.push({id:'drop'+this.state.nextDrop++,type:'drop',item:id,count:1,x:position.x-Math.sin(position.yaw)*1.5,z:position.z-Math.cos(position.yaw)*1.5,y:position.feet});this.changed();return {ok:true,message:`放下了 ${ITEMS[id].name}，可以捡回`};}
   treeStage(node){return this.state.depleted[node.id]===true?{phase:'split',hits:LOG_HITS}:this.state.trees[node.id]||{phase:'standing',hits:0,yaw:0,fallStart:0};}
   logPose(node){
@@ -209,11 +210,13 @@ export class SurvivalState {
     s.buildings=s.buildings.filter(v=>v.id!==id);if(s.camp===id)s.camp=null;this.changed();
     return {ok:true,message:`已拆除${RECIPES[b.type].name} · `+Object.entries(refund).map(([k,n])=>`${ITEMS[k].name} +${n}`).join(' · '),refund};
   }
-  eat(id){
+  eat(id,index){
     const item=ITEMS[id],s=this.state;if(!(item?.food||item?.water||item?.health)||s.inventory[id]<1)return {ok:false,message:'没有可使用的消耗品'};
     if((!item.food||s.vitals.food>=100)&&(!item.water||s.vitals.water>=100)&&(!item.health||s.vitals.health>=100))return {ok:false,message:'目前不需要，留着稍后使用吧'};
-    if(id==='water'&&!this.canFit({flask:1},{water:1}))return {ok:false,message:'需要留一个空水壶的位置'};
-    this.spend({[id]:1});if(id==='water')this.add({flask:1});s.vitals.food=Math.min(100,s.vitals.food+(item.food||0));s.vitals.water=Math.min(100,s.vitals.water+(item.water||0));s.vitals.health=Math.min(100,s.vitals.health+(item.health||0));
+    if(index!==undefined&&(!Number.isInteger(index)||this.bag()[index]?.id!==id))return {ok:false,message:'这个格子的物品已变化'};
+    const next=transaction(this.bag(),{[id]:1},id==='water'?{flask:1}:{},index);
+    if(!next)return {ok:false,message:'需要留一个空水壶的位置'};
+    s.bag=next;s.inventory[id]--;if(id==='water')s.inventory.flask=(s.inventory.flask||0)+1;s.vitals.food=Math.min(100,s.vitals.food+(item.food||0));s.vitals.water=Math.min(100,s.vitals.water+(item.water||0));s.vitals.health=Math.min(100,s.vitals.health+(item.health||0));
     if(id==='meal')s.goals.meal=true;this.changed();return {ok:true,message:`使用了${item.name} · ${item.note}`};
   }
   rest(building){
