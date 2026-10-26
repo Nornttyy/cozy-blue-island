@@ -1,8 +1,25 @@
 import {hashSeed,randomAt,CHUNK} from './world-seed.js';
 import {ITEMS} from './survival-state.js';
 export const SPECIES={Crab:{name:'沙蟹',hp:12,loot:{meat:1},scale:1},Rabbit:{name:'草原兔',hp:18,loot:{meat:2},scale:1},Boar:{name:'野猪',hp:54,loot:{meat:3,hide:2},scale:1},Fish:{name:'海鱼',hp:8,loot:{fish:1},scale:1}};
-export function wildlifeIn(math,cx,cz){const list=[],seed=hashSeed(math.seed);for(let i=0;i<4;i++){const x=(cx+randomAt(seed,cx,cz,800+i*2))*CHUNK,z=(cz+randomAt(seed,cx,cz,801+i*2))*CHUNK,y=math.sample(x,z),r=randomAt(seed,cx,cz,850+i);let type=y<-.7&&y>-8?'Fish':y>.25&&y<1.3?'Crab':y>1.3&&y<18?(r<.68?'Rabbit':'Boar'):null;if(!type)continue;if(type!=='Fish'&&Math.abs(math.sample(x+2,z)-y)>1.2)continue;list.push({id:`a${cx},${cz}:${i}`,type,x,z,y,phase:r*Math.PI*2});}return list;}
-export function animalPose(a,elapsed,math){const t=elapsed*(a.type==='Fish'?.46:.19)+a.phase,range=a.type==='Boar'?2.5:a.type==='Fish'?2.8:1.2,x=a.x+Math.cos(t)*range,z=a.z+Math.sin(t)*range,land=math.sample(x,z);if(a.type==='Fish')return {x:land<-.5?x:a.x,z:land<-.5?z:a.z,y:Math.max(-2.2,land+.4),yaw:-t};return {x:land>.2?x:a.x,z:land>.2?z:a.z,y:land>.2?land:a.y,yaw:-t};}
+// Fish meshes extend .35m above their origin and .4m horizontally. Keep their
+// complete orbit below the lowest wave trough (-.538m), not just its centre.
+const habitats=new WeakMap();
+export function fishHabitat(a,math){
+ let cache=habitats.get(math);if(!cache){cache=new Map();habitats.set(math,cache);}const key=a.x+','+a.z;if(cache.has(key))return cache.get(key);
+ let result=null;
+ for(const radius of [2.8,1.8,.9,0]){
+  let floor=-Infinity;
+  for(let j=0;j<48;j++){const t=j*Math.PI/24,x=a.x+Math.cos(t)*radius,z=a.z+Math.sin(t)*radius;for(const [dx,dz] of [[0,0],[.5,0],[-.5,0],[0,.5],[0,-.5]])floor=Math.max(floor,math.sample(x+dx,z+dz));}
+  if(floor< -1.3){result={radius,y:Math.min(-1.06,Math.max(-2.2,floor+.2))};break;}
+ }
+ if(cache.size>=512)cache.delete(cache.keys().next().value);cache.set(key,result);return result;
+}
+export function wildlifeIn(math,cx,cz){const list=[],seed=hashSeed(math.seed);for(let i=0;i<4;i++){const x=(cx+randomAt(seed,cx,cz,800+i*2))*CHUNK,z=(cz+randomAt(seed,cx,cz,801+i*2))*CHUNK,y=math.sample(x,z),r=randomAt(seed,cx,cz,850+i);let type=y< -1.3&&y>-8?'Fish':y>.25&&y<1.3?'Crab':y>1.3&&y<18?(r<.68?'Rabbit':'Boar'):null;if(!type)continue;if(type!=='Fish'&&Math.abs(math.sample(x+2,z)-y)>1.2)continue;const a={id:`a${cx},${cz}:${i}`,type,x,z,y,phase:r*Math.PI*2};if(type==='Fish'&&!fishHabitat(a,math))continue;list.push(a);}return list;}
+export function animalPose(a,elapsed,math){
+ const t=elapsed*(a.type==='Fish'?.46:.19)+a.phase;
+ if(a.type==='Fish'){const h=fishHabitat(a,math);if(!h)return {x:a.x,z:a.z,y:-2,yaw:-t,hidden:true};return {x:a.x+Math.cos(t)*h.radius,z:a.z+Math.sin(t)*h.radius,y:h.y,yaw:-t};}
+ const range=a.type==='Boar'?2.5:1.2,x=a.x+Math.cos(t)*range,z=a.z+Math.sin(t)*range,land=math.sample(x,z);return {x:land>.2?x:a.x,z:land>.2?z:a.z,y:land>.2?land:a.y,yaw:-t};
+}
 export function hunt(game,math,id,tool,p){const item=ITEMS[tool];if(tool==='bow')return {ok:false,message:'弓需要按住蓄力，松手射出箭矢'};if(!item?.weapon||!game.state.inventory[tool])return {ok:false,message:'需要装备猎矛或铁斧'};const match=/^a(-?\d+),(-?\d+):(\d+)$/.exec(id);if(!match)return {ok:false,message:'目标无效'};const a=wildlifeIn(math,+match[1],+match[2]).find(v=>v.id===id);if(!a)return {ok:false,message:'目标不在这里'};const pos=animalPose(a,game.state.elapsed,math),dx=pos.x-p.x,dz=pos.z-p.z;if(Math.hypot(dx,dz)>item.range+1||Math.abs(pos.y-(p.feet||0))>5)return {ok:false,message:'太远了，靠近或换弓'};if(Math.hypot(dx,dz)>.8&&(dx*-Math.sin(p.yaw)+dz*-Math.cos(p.yaw))/Math.hypot(dx,dz)<.65)return {ok:false,message:'请瞄准目标'};
  game.state.wildlife??={};const hp=game.state.wildlife[id]??SPECIES[a.type].hp;if(hp<=0)return {ok:false,message:'已经捕获过了'};
  if(hp<=item.weapon){const loot=game.spawnLoot(SPECIES[a.type].loot,pos);if(!loot.ok)return loot;}

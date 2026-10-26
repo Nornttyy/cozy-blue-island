@@ -20,9 +20,10 @@ import {installExpeditionModels,mergeRefinements} from './expedition-models.js';
 import {createExpedition} from './expedition.js';
 import {createClimate} from './climate.js';
 import {createCooperative,roomSession} from './cooperative.js';
+import {createSelectionOutline} from './selection-outline.js';
 
 const $ = id => document.getElementById(id);
-let renderer, player, camera, scene, ocean, bedTarget,underwater,sky,hud,titleCamera,survival,spring;
+let renderer, player, camera, scene, ocean, bedTarget,underwater,sky,hud,titleCamera,survival,spring,outline;
 let clockTime = 0, previousTime = 0, ready = false, paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let windTime = 0;
 let worldMath,worldStream,sun,worldDescriptor,expedition,climate,cooperative;
@@ -83,6 +84,7 @@ function resize() {
   renderer.setSize(innerWidth,innerHeight);
   renderer.getDrawingBufferSize(frameSize);
   bedTarget.setSize(frameSize.x,frameSize.y);
+  outline?.resize(frameSize.x,frameSize.y,renderer.getPixelRatio());
   underwater?.resize(frameSize.x,frameSize.y);
   ocean?.userData.reflection.resize(frameSize.x,frameSize.y);
   spring?.resize(frameSize.x,frameSize.y);
@@ -125,6 +127,7 @@ function tick(now) {
   }else{
     renderer.toneMapping=THREE.NeutralToneMapping;renderer.setRenderTarget(null);renderer.render(scene,camera);
   }
+  outline.setSelection(player.getState().active?(expedition?.selectedModel||survival?.selectedModel):null);outline.render(renderer,camera);
   measuredTime+=delta;measuredFrames++;
   if(measuredTime>=1){document.documentElement.dataset.renderStats=JSON.stringify({fps:Math.round(measuredFrames/measuredTime),water:'gerstner-refraction-planar-reflection',reflectionSize:ocean.userData.reflection.target.width});measuredTime=0;measuredFrames=0;}
 }
@@ -152,6 +155,7 @@ async function init() {
   underwater=createUnderwater(camera);
   bedTarget = new THREE.WebGLRenderTarget(1,1,{type:THREE.HalfFloatType,depthBuffer:true});
   bedTarget.depthTexture = new THREE.DepthTexture(1,1,THREE.UnsignedIntType);
+  outline=createSelectionOutline(bedTarget.depthTexture);
   const hemisphere=new THREE.HemisphereLight('#d9efff','#d6bd91',1.3);scene.add(hemisphere);
   sun = new THREE.DirectionalLight('#fff4dc',2.8);
   sun.position.copy(SUN_DIRECTION).multiplyScalar(38);sun.castShadow=true;

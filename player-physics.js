@@ -30,7 +30,8 @@ export class PlayerBody {
     for(let i=0;i<8;i++){const a=i*Math.PI/4;h=Math.max(h,this.sample(x+Math.cos(a)*this.radius,z+Math.sin(a)*this.radius));}
     return h;
   }
-  reset(x=0,z=4){this.x=x;this.z=z;this.feet=this.ground(x,z);this.vy=0;this.vx=0;this.vz=0;this.grounded=true;this.blocked=false;this.swimming=false;this.diveDepth=0;this.mode='walk';this.waterLevel=-.04;this.coyote=.09;this.jumpBuffer=0;}
+  reset(x=0,z=4){this.x=x;this.z=z;this.feet=this.ground(x,z);this.vy=0;this.vx=0;this.vz=0;this.grounded=true;this.blocked=false;this.swimming=false;this.diveDepth=0;this.mode='walk';this.waterLevel=-.04;this.coyote=.1;this.jumpBuffer=0;this.fallPeak=this.feet;this.landings=[];this.landingSerial=0;}
+  consumeLandings(){const events=this.landings;this.landings=[];return events;}
   tryMove(x,z){
     if(this.canMove&&!this.canMove(x,z,this.radius,this.feet))return false;
     const h=this.ground(x,z),center=this.sample(x,z);
@@ -42,11 +43,13 @@ export class PlayerBody {
     this.x=x;this.z=z;return true;
   }
   update(delta,input,yaw,time=0){
-    const count=Math.max(1,Math.ceil(Math.min(delta,.15)*90)),dt=Math.min(delta,.15)/count;
-    if(input.jump)this.jumpBuffer=.12;
+    delta=Number.isFinite(delta)?Math.max(0,Math.min(delta,.15)):0;
+    const count=Math.max(1,Math.ceil(delta*90)),dt=delta/count;
+    if(input.jump)this.jumpBuffer=.14;
     this.blocked=false;
     for(let i=0;i<count;i++){
-      this.coyote=this.grounded?.09:Math.max(0,this.coyote-dt);this.jumpBuffer=Math.max(0,this.jumpBuffer-dt);
+      if(this.grounded||this.swimming)this.fallPeak=this.feet;else this.fallPeak=Math.max(this.fallPeak,this.feet);
+      this.coyote=this.grounded?.1:Math.max(0,this.coyote-dt);this.jumpBuffer=Math.max(0,this.jumpBuffer-dt);
       if(this.jumpBuffer>0&&this.coyote>0&&!this.swimming){this.vy=4.4;this.grounded=false;this.coyote=0;this.jumpBuffer=0;}
       this.waterLevel=this.water(this.x,this.z,time);
       const floor=this.ground(this.x,this.z),depth=this.waterLevel-floor;
@@ -74,7 +77,10 @@ export class PlayerBody {
       }else this.vy-=12*dt;
       this.feet+=this.vy*dt;
       const ground=this.ground(this.x,this.z);
-      if(this.feet<=ground){this.feet=ground;this.vy=0;this.grounded=true;}
+      if(this.feet<=ground){
+        if(!this.swimming&&this.fallPeak-ground>.35&&this.vy< -1){const event={distance:this.fallPeak-ground,speed:-this.vy,waterDepth:Math.max(0,this.waterLevel-ground)};this.landings.push(event);this.lastLanding=event;this.landingSerial++;}
+        this.feet=ground;this.vy=0;this.grounded=true;this.fallPeak=ground;
+      }
       else this.grounded=false;
       this.mode=this.swimming?(this.feet+this.eyeHeight<this.waterLevel-.12?'dive':'swim'):(this.waterLevel-this.feet>.12?'wade':'walk');
     }

@@ -10,7 +10,7 @@ export function firstPerson(camera,canvas,terrain,seafloor,spring=null,world=nul
   const body=new PlayerBody((x,z)=>world?landSample(x,z):Math.max(landSample(x,z),seaSample(x,z)),(x,z,time)=>spring&&springDistance(x,z)<.97?spring.waterY:surfaceHeight(x,z,time,world?-world.sample(x,z)*3:undefined));if(world)body.worldLimit=Infinity;
   const keys=new Set(),$=id=>document.getElementById(id);
   let yaw=Math.PI,pitch=-.32,active=false,jump=false,eye=body.feet+body.eyeHeight;
-  let locked=false,sensitivity=1,vehicle=null;
+  let locked=false,sensitivity=1,vehicle=null,landingAge=1,landingStrength=0,reducedMotion=false;
   let lastMode='';
   camera.rotation.order='YXZ';
   function hint(){
@@ -55,20 +55,21 @@ export function firstPerson(camera,canvas,terrain,seafloor,spring=null,world=nul
     window.dispatchEvent(new Event('island:relocated'));
   }
   return {
-    reset,begin,pause,
+    reset,begin,pause,consumeLandings:()=>body.consumeLandings(),setReducedMotion:value=>{reducedMotion=!!value;},
     setVehicle(value){vehicle=value;},
     setCollision(check){body.canMove=check;},
     restore(position){body.reset(position.x,position.z);yaw=Number.isFinite(position.yaw)?position.yaw:Math.PI;pitch=-.32;eye=body.feet+body.eyeHeight;keys.clear();jump=false;window.dispatchEvent(new Event('island:relocated'));},
     setSensitivity(value){sensitivity=Math.max(.5,Math.min(2,Number(value)||1));},
     sampleLand:landSample,
-    getState(){const lock=capture.getState();return {x:body.x,z:body.z,feet:body.feet,eye:camera.position.y,yaw,pitch,active,locked,lockPending:lock.pending,lockError:lock.error,mode:vehicle?'sailing':body.mode,speed:Math.hypot(body.vx||0,body.vz||0),vehicle:vehicle?.id||null,boatYaw:vehicle?.heading?.()??yaw,grounded:body.grounded,depth:Math.max(0,body.waterLevel-(body.feet+body.eyeHeight))};},
+    getState(){const lock=capture.getState();return {x:body.x,z:body.z,feet:body.feet,eye:camera.position.y,yaw,pitch,active,locked,lockPending:lock.pending,lockError:lock.error,mode:vehicle?'sailing':body.mode,speed:Math.hypot(body.vx||0,body.vz||0),vehicle:vehicle?.id||null,boatYaw:vehicle?.heading?.()??yaw,grounded:body.grounded,depth:Math.max(0,body.waterLevel-camera.position.y)};},
     update(dt,time=0){
       const input={forward:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),side:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),sprint:keys.has('ShiftLeft')||keys.has('ShiftRight'),descend:keys.has('KeyC'),ascend:keys.has('Space'),jump};
       if(vehicle){const p=vehicle.update(active?dt:0,input,yaw,time);if(p){body.x=p.x;body.z=p.z;body.feet=p.y;body.vx=p.speed||0;body.vz=0;body.swimming=false;body.waterLevel=0;}jump=false;}
-      else if(active){body.update(dt,input,yaw,time);jump=false;}
+      else if(active){const serial=body.landingSerial;body.update(dt,input,yaw,time);jump=false;if(body.landingSerial!==serial){landingAge=0;landingStrength=Math.min(.045,body.lastLanding.speed*.0035);}}
+      landingAge+=dt;const dip=active&&!reducedMotion&&landingAge<.24?Math.sin(landingAge/.24*Math.PI)*landingStrength:0;
       eye+=(body.feet+(vehicle?1.05:body.eyeHeight)-eye)*(1-Math.exp(-(body.swimming?7:20)*dt));
       const minEye=vehicle?body.feet+.6:body.swimming?(body.diveDepth>.02?body.ground(body.x,body.z)+.35:body.waterLevel+.2):body.feet+1.3;
-      camera.position.set(body.x,Math.max(minEye,eye),body.z);
+      camera.position.set(body.x,Math.max(minEye,eye-dip),body.z);
       camera.rotation.set(pitch,yaw,0);
       if(lastMode!==body.mode){hint();lastMode=body.mode;}
       document.documentElement.dataset.player=JSON.stringify({x:+body.x.toFixed(3),z:+body.z.toFixed(3),feet:+body.feet.toFixed(3),eye:+camera.position.y.toFixed(3),depth:+Math.max(0,body.waterLevel-camera.position.y).toFixed(2),mode:body.mode,yaw:+yaw.toFixed(3),pitch:+pitch.toFixed(3),active,locked,grounded:body.grounded,blocked:body.blocked});

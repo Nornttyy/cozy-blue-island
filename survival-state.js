@@ -1,6 +1,7 @@
 // Pure survival rules: rendering and input never mutate inventory directly.
 import {BAG_SIZE,HOTBAR_SIZE,defaultHotbar,packCounts,totals,validBag,transaction,moveStack,migrateInventory,syncHotbar,transferStack,quickTransfer} from './inventory.js';
 import {planGroundLoot,restoreGroundLoot} from './ground-loot.js';
+import {updateHazards} from './survival-hazards.js';
 export const SAVE_KEY='cozy-island-survival-v1';
 export const ITEMS={
   wood:{name:'木材',icon:'wood',note:'拾取枯枝，或砍倒树后劈开倒木。'},stone:{name:'石块',icon:'stone',note:'海岸上的石堆，采完不再刷新。'},
@@ -50,21 +51,22 @@ Object.assign(RECIPES,{
 });
 Object.assign(NODE_TYPES,{ironore:{name:'铁矿脉',yield:{ironore:3,stone:1},tool:'pickaxe'},copperore:{name:'铜矿脉',yield:{copperore:3},tool:'pickaxe'},salt:{name:'盐晶',yield:{salt:3}}});
 export const matchesTool=(held,required)=>held===required||ITEMS[held]?.tool===required;
+for(const [id,r] of Object.entries(RECIPES))if(r.build)ITEMS[id]={name:r.name,icon:id,placeable:true,note:'合成后存入背包；放进快捷栏并选中，左键放置。可拆下重新摆放。'};
 // Every inventory entry has its own illustration, including refined/cooked goods.
 for(const [id,item] of Object.entries(ITEMS))item.icon=id;
 for(const [id,recipe] of Object.entries(RECIPES))recipe.icon=id;
-export const dismantleRefund=type=>Object.fromEntries(Object.entries(RECIPES[type]?.cost||{}).map(([id,n])=>[id,Math.floor(n*.75)]).filter(([,n])=>n>0));
+export const dismantleRefund=type=>RECIPES[type]?.build?{[type]:1}:{};
 export const GOALS=[
   ['gather','收集岸边材料','点击采集枯枝、石堆或长叶草，再对准地上的材料点击拾取。'],
   ['axe','做一把石斧','按 B 制作石斧，再放入下方快捷栏装备。'],
-  ['fire','点亮第一处篝火','收集 6 木材、4 石块，在制作页放置篝火。'],
+  ['fire','点亮第一处篝火','收集 6 木材、4 石块，先合成篝火，再选中快捷栏里的篝火放置。'],
   ['shelter','搭好自己的叶棚','收集 8 木材、6 纤维，在平坦陆地搭建。'],
   ['meal','吃一顿热乎的饭','在海边捡鲜贝，靠近篝火制作并食用。']
 ];
 const clamp=(n,a,b)=>Number.isFinite(n)?Math.max(a,Math.min(b,n)):a;
 export const TREE_HITS=4,LOG_HITS=3,FALL_SECONDS=1.4,TRUNK_LENGTH=3.45;
 export function segmentDistance(x,z,ax,az,bx,bz){const dx=bx-ax,dz=bz-az,t=clamp(((x-ax)*dx+(z-az)*dz)/(dx*dx+dz*dz||1),0,1);return Math.hypot(x-ax-t*dx,z-az-t*dz);}
-export function freshState(){return {version:1,inventoryVersion:2,inventory:Object.fromEntries(Object.keys(ITEMS).map(k=>[k,0])),bag:Array(BAG_SIZE).fill(null),hotbar:defaultHotbar(),selected:0,vitals:{health:100,food:78,water:72},elapsed:0,depleted:{},trees:{},wildlife:{},buildings:[],drops:[],nextDrop:0,goals:{},position:null,camp:null,restsAt:-120};}
+export function freshState(){return {version:1,inventoryVersion:2,inventory:Object.fromEntries(Object.keys(ITEMS).map(k=>[k,0])),bag:Array(BAG_SIZE).fill(null),hotbar:defaultHotbar(),selected:0,vitals:{health:100,food:78,water:72,oxygen:100},elapsed:0,depleted:{},trees:{},wildlife:{},buildings:[],drops:[],nextDrop:0,goals:{},position:null,camp:null,restsAt:-120};}
 export function makeLayout(sample){
   const nodes=[];
   const add=(type,x,z)=>{const y=sample(x,z);if(!Number.isFinite(y)||y<.3)return false;if(nodes.some(n=>Math.hypot(n.x-x,n.z-z)<1.2))return false;nodes.push({id:`n${nodes.length}`,type,x,z,y});return true;};
@@ -87,7 +89,7 @@ export function decodeSave(raw,nodes,sample,expanded=false){
   const s=freshState();
   for(const k in ITEMS)s.inventory[k]=Math.floor(clamp(data.inventory[k],0,k==='axe'?1:999));
   s.bag=data.bag;s.hotbar=data.hotbar;s.inventoryVersion=data.inventoryVersion;migrateInventory(s,ITEMS);s.selected=Math.floor(clamp(data.selected,0,HOTBAR_SIZE-1));
-  for(const k in s.vitals)s.vitals[k]=clamp(data.vitals[k],0,100);
+  for(const k in s.vitals)s.vitals[k]=clamp(data.vitals[k]??s.vitals[k],0,100);
   s.elapsed=clamp(data.elapsed,0,1e9);s.restsAt=clamp(data.restsAt??-120,-120,s.elapsed);
   s.wildlife={};for(const [id,hp]of Object.entries(data.wildlife||{}))if(/^a-?\d+,-?\d+:\d+$/.test(id)&&Number.isFinite(hp))s.wildlife[id]=clamp(hp,0,100);
   for(const n of nodes){const v=data.depleted?.[n.id];if(v===true||Number.isFinite(v)&&v>0)s.depleted[n.id]=v===true?true:clamp(v,0,s.elapsed+180);}
@@ -111,7 +113,7 @@ export function decodeSave(raw,nodes,sample,expanded=false){
   return s;
 }
 export class SurvivalState {
-  constructor(nodes,sample,saved){this.nodes=nodes;this.sample=sample;this.state=saved||freshState();this.state.trees??={};migrateInventory(this.state,ITEMS);this.revision=0;}
+  constructor(nodes,sample,saved){this.nodes=nodes;this.sample=sample;this.state=saved||freshState();this.state.trees??={};this.state.vitals.oxygen??=100;for(const k in ITEMS)this.state.inventory[k]??=0;migrateInventory(this.state,ITEMS);this.revision=0;}
   changed(){syncHotbar(this.state);this.revision++;}
   available(node){const v=this.state.depleted[node.id];return v!==true&&!(Number.isFinite(v)&&v>this.state.elapsed);}
   canAfford(cost){return Object.entries(cost).every(([k,n])=>this.state.inventory[k]>=n);}
@@ -168,14 +170,18 @@ export class SurvivalState {
     this.changed();return {ok:true,message:Object.entries(rule.yield).map(([k,n])=>`${ITEMS[k].name} ×${n}`).join(' · ')+' 已落地 · 左键拾取'};
   }
   craft(id,position){
-    const r=RECIPES[id];if(!r||r.build)return {ok:false,message:'请在陆地上选择建造位置'};
+    const r=RECIPES[id];if(!r)return {ok:false,message:'没有这个配方'};
     if(['axe','pickaxe','torch'].includes(id)&&this.state.inventory[id])return {ok:false,message:'已经有这件工具了'};
     if(this.state.inventory[id]>=999)return {ok:false,message:'背包里已经装满了这种物品'};
     if(r.station&&!this.near(r.station,position,3.5))return {ok:false,message:`需要靠近${RECIPES[r.station].name}`};
     if(!this.canAfford(r.cost))return {ok:false,message:'材料还不够，红色数字是缺少的材料'};
     if(!this.canFit({[id]:r.amount||1},r.cost))return {ok:false,message:'背包空间不足，先腾出格子'};
-    this.spend(r.cost);this.add({[id]:r.amount||1});if(id==='axe')this.state.goals.axe=true;
-    return {ok:true,message:`做好了：${r.name}`};
+    if(r.build){
+      // Prefer storage slots, so crafting never forces the currently empty hand into placement.
+      const bag=this.bag(),rotated=[...bag.slice(HOTBAR_SIZE),...bag.slice(0,HOTBAR_SIZE)],next=transaction(rotated,r.cost,{[id]:1}),tail=bag.length-HOTBAR_SIZE;
+      this.state.bag=[...next.slice(tail),...next.slice(0,tail)];const counts=totals(this.state.bag);for(const k in ITEMS)this.state.inventory[k]=counts[k]||0;this.changed();
+    }else{this.spend(r.cost);this.add({[id]:r.amount||1});if(id==='axe')this.state.goals.axe=true;}
+    return {ok:true,message:`做好了：${r.name}`+(r.build?' · 已存入背包，放入快捷栏后选中放置':'')};
   }
   near(type,p,d=3.5){return !!p&&this.state.buildings.some(b=>b.type===type&&Math.hypot(b.x-p.x,b.z-p.z)<=d);}
   placement(type,x,z,p){
@@ -190,12 +196,17 @@ export class SurvivalState {
     if(this.state.buildings.some(b=>Math.hypot(b.x-x,b.z-z)<radius+RECIPES[b.type].radius+.45))return '与营地设施重叠了';
     if(this.nodes.some(n=>this.available(n)&&['tree','spring'].includes(n.type)&&Math.hypot(n.x-x,n.z-z)<radius+(n.type==='tree'?.55:1.3)))return '这里有树木或淡水泉';
     if(this.nodes.some(n=>n.type==='tree'&&['falling','fallen'].includes(this.treeStage(n).phase)&&segmentDistance(x,z,n.x,n.z,this.logPose(n).endX,this.logPose(n).endZ)<radius+.3))return '先清理地上的倒木';
-    if(!this.canAfford(r.cost))return '建造材料不足';
+    if(!(this.state.inventory[type]>0))return '背包里没有这件建筑物品，请先合成';
     return '';
   }
-  build(type,x,z,yaw,p){
+  build(type,x,z,yaw,p,index){
+    // Buildings are inventory items.  The authoritative state must require the
+    // exact selected hotbar slot too; otherwise a stale or forged network
+    // action could place something that was never actually held.
+    if(!Number.isInteger(index)||index<0||index>=HOTBAR_SIZE||this.bag()[index]?.id!==type)return {ok:false,message:'请先把建筑物品放进快捷栏并选中'};
     const reason=this.placement(type,x,z,p);if(reason)return {ok:false,message:reason};
-    this.spend(RECIPES[type].cost);
+    const next=transaction(this.bag(),{[type]:1},{},index);if(!next)return {ok:false,message:'建筑物品已被使用'};
+    this.state.bag=next;this.state.inventory[type]--;this.changed();
     this.state.nextBuilding=Math.max(this.state.nextBuilding||0,0,...this.state.buildings.map(b=>Number(b.id.slice(1))+1));
     const b={id:`b${this.state.nextBuilding++}`,type,x,z,y:type==='boat'?-.19:this.sample(x,z),yaw:Number.isFinite(yaw)?yaw:0};
     this.state.buildings.push(b);this.state.goals[type]=true;if(type==='shelter')this.state.camp=b.id;this.changed();
@@ -207,9 +218,14 @@ export class SurvivalState {
     if(!p||![p.x,p.z,p.feet].every(Number.isFinite)||Math.hypot(p.x-b.x,p.z-b.z)>3||Math.abs(p.feet-b.y)>1.9)return {ok:false,message:'需要靠近要拆除的设施'};
     if(b.owner||p.vehicle===id)return {ok:false,message:'船上有人，先停泊离船再拆除'};
     const refund=dismantleRefund(b.type);
-    const dropped=this.spawnLoot(refund,b);if(!dropped.ok)return dropped;
+    // A teardown returns the complete placeable item.  Prefer the inventory:
+    // that keeps a dismantled boat reachable even when it was in shallow water.
+    // Only fall back to a manual ground pickup when every bag slot is full.
+    const returnToBag=this.canFit(refund);
+    if(!returnToBag){const dropped=this.spawnLoot(refund,b);if(!dropped.ok)return dropped;}
     s.buildings=s.buildings.filter(v=>v.id!==id);if(s.camp===id)s.camp=null;this.changed();
-    return {ok:true,message:`已拆除${RECIPES[b.type].name} · 返还材料留在地上，左键拾取`,refund};
+    if(returnToBag){this.add(refund);return {ok:true,message:`已拆除${RECIPES[b.type].name} · 完整物品已放回背包`,refund};}
+    return {ok:true,message:`背包已满 · 已拆除${RECIPES[b.type].name}，完整物品留在地上，左键拾取`,refund};
   }
   eat(id,index){
     const item=ITEMS[id],s=this.state;if(!(item?.food||item?.water||item?.health)||s.inventory[id]<1)return {ok:false,message:'没有可使用的消耗品'};
@@ -229,13 +245,14 @@ export class SurvivalState {
     s.vitals.health=Math.min(100,s.vitals.health+35);s.vitals.food-=10;s.vitals.water-=10;s.restsAt=s.elapsed;this.changed();
     return {ok:true,message:'休息片刻 · 健康 +35，饱食与水分各 −10'};
   }
-  tick(dt,active){
+  tick(dt,active,environment={}){
     if(!active)return null;dt=clamp(dt,0,.25);const s=this.state;s.elapsed+=dt;
+    this.hazardFeedback=updateHazards(s.vitals,dt,environment);
     for(const t of Object.values(s.trees))if(t.phase==='falling'&&s.elapsed-t.fallStart>=FALL_SECONDS){t.phase='fallen';this.changed();}
     s.vitals.food=Math.max(0,s.vitals.food-dt*.035);s.vitals.water=Math.max(0,s.vitals.water-dt*.055);
     if(s.vitals.food===0||s.vitals.water===0)s.vitals.health=Math.max(0,s.vitals.health-dt*.6);
     if(s.vitals.health<=0){
-      s.vitals={health:60,food:45,water:55};const b=s.buildings.find(b=>b.id===s.camp);
+      s.vitals={health:60,food:45,water:55,oxygen:100};const b=s.buildings.find(b=>b.id===s.camp);
       let respawn={x:0,z:4};
       if(b)for(let i=0;i<8;i++){const p={x:b.x+Math.cos(i*Math.PI/4)*2.2,z:b.z+Math.sin(i*Math.PI/4)*2.2};if(this.sample(p.x,p.z)>.55&&!this.nodes.some(n=>n.type==='tree'&&this.available(n)&&Math.hypot(n.x-p.x,n.z-p.z)<.7)&&!s.buildings.some(v=>Math.hypot(v.x-p.x,v.z-p.z)<RECIPES[v.type].radius+.35)){respawn=p;break;}}
       this.changed();return {respawn,message:'体力耗尽，已回到营地休息 · 物品保留'};

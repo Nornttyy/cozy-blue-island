@@ -29,7 +29,8 @@ export function buildingModel(type,assets){
 }
 export function groundDropModel(item,assets){
   const name={wood:'Wood',stone:'Stone0',fiber:'Fiber',berry:'Berry',shell:'Shell',axe:'Axe'}[item];
-  const model=name?assets.getObjectByName(name)?.clone(true):['herb','mushroom','flint','clay','pickaxe','flask'].includes(item)?extraModel(item):extraModel('drop');
+  const model=RECIPES[item]?.build?buildingModel(item,assets):name?assets.getObjectByName(name)?.clone(true):['herb','mushroom','flint','clay','pickaxe','flask'].includes(item)?extraModel(item):extraModel('drop');
+  model.traverse(o=>{if(o.isLight)o.intensity=0;if(o.name==='flame')o.visible=false;});
   const root=new THREE.Group(),mount=new THREE.Group();root.name='GroundLoot_'+item;root.add(mount);mount.add(model);
   // Miniature physical piles, seated on the terrain. No idle spin or magnet motion.
   const box=new THREE.Box3().setFromObject(model),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3()),scale=Math.min(1,.55/Math.max(size.x,size.y,size.z,.01));
@@ -66,7 +67,7 @@ export function createSurvivalWorld(scene,game,shadowChanged,assets){
     else if(n.type==='spring')wind.attach(g,4);
   }
   for(const n of game.nodes)addNode(n);
-  const ring=new THREE.Mesh(new THREE.RingGeometry(.42,.47,36),new THREE.MeshBasicMaterial({color:'#fff5b1',side:THREE.DoubleSide,transparent:true,opacity:.8,depthWrite:false}));ring.rotation.x=-Math.PI/2;ring.visible=false;group.add(ring);
+  let selection=null;
   function sync(){
     let dirty=seen!==game.revision;seen=game.revision;
     const present=new Set(game.nodes.map(n=>n.id));for(const [id,g]of nodeMeshes)if(!present.has(id)){wind.detach(g.userData.body||g);group.remove(g);nodeMeshes.delete(id);dirty=true;}
@@ -93,7 +94,8 @@ export function createSurvivalWorld(scene,game,shadowChanged,assets){
     spring:nodeMeshes.get(game.nodes.find(n=>n.type==='spring')?.id),
     tool:assets.getObjectByName('Axe').clone(true),
     impact(n){const p=game.interactionNode(n);for(let i=0;i<5;i++){const m=mesh(group,chipGeo,palette.cut,p.x,p.y+(game.treeStage(n).phase==='standing'?.85:.3),p.z);chips.push({m,age:0,vx:Math.sin(i*2.4)*.9,vz:Math.cos(i*2.4)*.9,vy:1.1+i*.13});}},
-    highlight(n,progress=0){ring.visible=!!n;if(!n)return;ring.position.set(n.x,n.y+.045,n.z);const r=n.type==='drop'?.72:n.type==='tree'?.85:n.type==='spring'?2:1.25;ring.scale.setScalar(r+progress*.12);ring.material.opacity=.6+progress*.35;},
+    get selectedModel(){return selection;},
+    highlight(n){const g=n?(n.building?buildMeshes:nodeMeshes).get(n.id):null;selection=n?.type==='tree'&&['fallen','falling'].includes(game.treeStage(n).phase)?g?.userData.body:g;},
     preview(type,position,valid){
       if(!type){clearGhost();return;}
       if(type!==ghostType){clearGhost();ghost=buildingModel(type,assets);ghostType=type;ghost.traverse(o=>{if(o.isLight)o.intensity=0;if(o.isMesh){o.material=o.material.clone();o.material.transparent=true;o.material.opacity=.4;o.material.depthWrite=false;o.castShadow=false;}});group.add(ghost);}

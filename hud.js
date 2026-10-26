@@ -25,11 +25,11 @@ export function createHUD(player,{setWaves,survival}){
     button.addEventListener('click',()=>select(i,true));$('hotbar').append(button);return button;
   });
   function select(index){selected=index;survival.select(index);updateSlots();}
-  function updateSlots(){const bag=survival.game.bag();slots.forEach((el,i)=>{const stack=bag[i],item=ITEMS[stack?.id];el.classList.toggle('selected',i===selected);el.classList.remove('unavailable');el.setAttribute('aria-pressed',String(i===selected));el.setAttribute('aria-label',`快捷栏 ${i+1}：${item?.name||'空手'}${item?'，'+stack.count:''}`);el.innerHTML=`<kbd>${i+1}</kbd>${item?icon(stack.id):''}${stack?.count>1?'<small class="slot-count">'+stack.count+'</small>':''}`;});const item=ITEMS[bag[selected]?.id];$('equipped-name').textContent=item?item.name+(item.food||item.water||item.health?' · 左键使用':bag[selected].id==='bow'?' · 按住拉弓，松手射出':''):'空手 · 左键拾取';}
+  function updateSlots(){const bag=survival.game.bag();slots.forEach((el,i)=>{const stack=bag[i],item=ITEMS[stack?.id];el.classList.toggle('selected',i===selected);el.classList.remove('unavailable');el.setAttribute('aria-pressed',String(i===selected));el.setAttribute('aria-label',`快捷栏 ${i+1}：${item?.name||'空手'}${item?'，'+stack.count:''}`);el.innerHTML=`<kbd>${i+1}</kbd>${item?icon(stack.id):''}${stack?.count>1?'<small class="slot-count">'+stack.count+'</small>':''}`;});const item=ITEMS[bag[selected]?.id];$('equipped-name').textContent=item?item.name+(item.placeable?' · 左键放置':item.food||item.water||item.health?' · 左键使用':bag[selected].id==='bow'?' · 按住拉弓，松手射出':''):'空手 · 左键拾取';}
   function toast(text){clearTimeout(toastTimer);$('hud-toast').textContent=text;$('hud-toast').classList.add('show');if(panel.open)$('panel-footer-note').textContent=text;toastTimer=setTimeout(()=>$('hud-toast').classList.remove('show'),3200);}
   function applyPreferences(save=false){
     document.body.classList.toggle('hidden-guidance',!prefs.guidance);document.body.classList.toggle('reduced-motion',prefs.reducedMotion);
-    player.setSensitivity(prefs.sensitivity);setWaves(prefs.waves);
+    player.setSensitivity(prefs.sensitivity);player.setReducedMotion?.(prefs.reducedMotion||matchMedia('(prefers-reduced-motion: reduce)').matches);setWaves(prefs.waves);
     if(save){try{localStorage.setItem(PREFS_KEY,JSON.stringify(prefs));}catch{$('panel-footer-note').textContent='浏览器禁止存储，设置仅在本次生效';}}
   }
   function sync(){
@@ -187,6 +187,7 @@ export function createHUD(player,{setWaves,survival}){
       $('depth-readout').innerHTML=s.depth.toFixed(1)+'<small>米深</small>';
       updateJournal(s);
       for(const key of ['health','food','water']){const value=survival.game.state.vitals[key],el=$('vital-'+key);el.textContent=Math.ceil(value);el.closest('.vital').classList.toggle('low',value<25);$('meter-'+key).style.width=value+'%';}
+      const oxygen=survival.game.state.vitals.oxygen??100,oxygenUI=$('oxygen-status');oxygenUI.hidden=!(player.getState().depth>.12||oxygen<99.99);oxygenUI.classList.toggle('low',oxygen<=25);$('vital-oxygen').textContent=Math.ceil(oxygen);$('meter-oxygen').style.width=oxygen+'%';$('oxygen-caption').textContent=player.getState().depth>.12?'空格 · 上浮':'呼吸恢复中';
       $('save-status').textContent=survival.saveState;
       if(panel.open&&panelPage==='map'){drawMap($('island-map'));updateMapText(s);}
     }
