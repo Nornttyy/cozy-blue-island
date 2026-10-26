@@ -5,6 +5,7 @@ import {extraModel} from './extra-models.js';
 import {hashSeed} from './world-seed.js';
 import {expeditionModel} from './expedition-models.js';
 import {poseBoat} from './boat-motion.js';
+import {lootLift} from './ground-loot.js';
 const mat=color=>new THREE.MeshStandardMaterial({color,roughness:.88});
 const palette={cut:mat('#dcc28c')};
 function mesh(g,geometry,material,x,y,z,sx=1,sy=sx,sz=sx){const m=new THREE.Mesh(geometry,material);m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=true;m.receiveShadow=true;g.add(m);return m;}
@@ -26,11 +27,21 @@ export function buildingModel(type,assets){
   }
   return g;
 }
+export function groundDropModel(item,assets){
+  const name={wood:'Wood',stone:'Stone0',fiber:'Fiber',berry:'Berry',shell:'Shell',axe:'Axe'}[item];
+  const model=name?assets.getObjectByName(name)?.clone(true):['herb','mushroom','flint','clay','pickaxe','flask'].includes(item)?extraModel(item):extraModel('drop');
+  const root=new THREE.Group(),mount=new THREE.Group();root.name='GroundLoot_'+item;root.add(mount);mount.add(model);
+  // Miniature physical piles, seated on the terrain. No idle spin or magnet motion.
+  const box=new THREE.Box3().setFromObject(model),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3()),scale=Math.min(1,.55/Math.max(size.x,size.y,size.z,.01));
+  model.position.sub(new THREE.Vector3(center.x,box.min.y,center.z));mount.scale.setScalar(scale);mount.position.y=.025;
+  return root;
+}
 function nodeModel(n,assets){
   const g=new THREE.Group();
   const index=/^n\d+$/.test(n.id)?Number(n.id.slice(1)):hashSeed(n.id)%10000,name={wood:'Wood',stone:'Stone'+index%3,fiber:'Fiber',berry:'Berry',shell:'Shell',spring:'Spring'}[n.type];
   if(name){const model=assets.getObjectByName(name).clone(true);g.add(model);if(n.type!=='spring')g.rotation.y=index*2.39996;}
-  if(['herb','mushroom','flint','clay','drop'].includes(n.type))g.add(extraModel(n.type));
+  if(n.type==='drop')g.add(groundDropModel(n.item,assets));
+  if(['herb','mushroom','flint','clay'].includes(n.type))g.add(extraModel(n.type));
   if(['ironore','copperore','salt'].includes(n.type))g.add(expeditionModel({ironore:'IronOre',copperore:'CopperOre',salt:'Salt'}[n.type]));
   if(n.type==='tree'){
     const species=[2,5].includes(n.biome)?'Pine':[1,4].includes(n.biome)?'Broadleaf':null;
@@ -66,7 +77,9 @@ export function createSurvivalWorld(scene,game,shadowChanged,assets){
       const elapsed=(game.state.elapsed-t.fallStart)/FALL_SECONDS,fall=t.phase==='falling'?Math.min(1,elapsed*elapsed):t.phase==='fallen'?1:0;
       g.userData.body.rotation.x=pose.angle*fall;
       if(t.phase==='falling')dirty=true;
-    }else if(n.type==='berry'){const fruit=g.getObjectByName('fruit');if(fruit.visible!==available){fruit.visible=available;dirty=true;}}else if(g.visible!==available){g.visible=available;dirty=true;}}
+    }else if(n.type==='berry'){const fruit=g.getObjectByName('fruit');if(fruit.visible!==available){fruit.visible=available;dirty=true;}}else if(g.visible!==available){g.visible=available;dirty=true;}
+      if(n.type==='drop'){const y=n.y+lootLift(game.state.elapsed-(n.bornAt??-10));if(g.position.y!==y){g.position.y=y;dirty=true;}}
+    }
     for(const [id,g]of buildMeshes){const b=game.state.buildings.find(b=>b.id===id);if(!b||game.view&&Math.hypot(b.x-game.view.x,b.z-game.view.z)>100){group.remove(g);buildMeshes.delete(id);dirty=true;}}
     for(const b of game.state.buildings)if(!buildMeshes.has(b.id)&&(!game.view||Math.hypot(b.x-game.view.x,b.z-game.view.z)<100)){const g=buildingModel(b.type,assets);g.position.set(b.x,b.y,b.z);g.rotation.y=b.yaw;group.add(g);buildMeshes.set(b.id,g);dirty=true;}
     for(const b of game.state.buildings)if(b.type==='boat'){const g=buildMeshes.get(b.id);if(g){g.position.set(b.x,b.y,b.z);poseBoat(g,b,game.state.elapsed);}}
@@ -80,7 +93,7 @@ export function createSurvivalWorld(scene,game,shadowChanged,assets){
     spring:nodeMeshes.get(game.nodes.find(n=>n.type==='spring')?.id),
     tool:assets.getObjectByName('Axe').clone(true),
     impact(n){const p=game.interactionNode(n);for(let i=0;i<5;i++){const m=mesh(group,chipGeo,palette.cut,p.x,p.y+(game.treeStage(n).phase==='standing'?.85:.3),p.z);chips.push({m,age:0,vx:Math.sin(i*2.4)*.9,vz:Math.cos(i*2.4)*.9,vy:1.1+i*.13});}},
-    highlight(n,progress=0){ring.visible=!!n;if(!n)return;ring.position.set(n.x,n.y+.045,n.z);const r=n.type==='tree'?.85:n.type==='spring'?2:1.25;ring.scale.setScalar(r+progress*.12);ring.material.opacity=.6+progress*.35;},
+    highlight(n,progress=0){ring.visible=!!n;if(!n)return;ring.position.set(n.x,n.y+.045,n.z);const r=n.type==='drop'?.72:n.type==='tree'?.85:n.type==='spring'?2:1.25;ring.scale.setScalar(r+progress*.12);ring.material.opacity=.6+progress*.35;},
     preview(type,position,valid){
       if(!type){clearGhost();return;}
       if(type!==ghostType){clearGhost();ghost=buildingModel(type,assets);ghostType=type;ghost.traverse(o=>{if(o.isLight)o.intensity=0;if(o.isMesh){o.material=o.material.clone();o.material.transparent=true;o.material.opacity=.4;o.material.depthWrite=false;o.castShadow=false;}});group.add(ghost);}

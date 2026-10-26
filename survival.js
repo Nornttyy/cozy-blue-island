@@ -14,9 +14,10 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
   try{const raw=localStorage.getItem(saveKey);if(raw){try{saved=decodeSave(raw,nodes,player.sampleLand,!!math);}catch{localStorage.setItem(saveKey+'-recovery',raw);saveWarning='旧存档无法读取，已保留备份并开始新营地';}}}catch{saveWarning='浏览器不能保存，本次进度请勿刷新';saveBlocked=true;}
   const game=new SurvivalState(nodes,player.sampleLand,saved),world=createSurvivalWorld(scene,game,shadowChanged,assets);
   player.setCollision(world.canMove);if(saved?.position)player.restore(saved.position);
-  game.expanded=!!math;let nodeCell='',dropRevision=-1,cellNodes=[];
-  function streamNodes(s){if(!math)return;game.view=s;const cx=Math.floor(s.x/CHUNK),cz=Math.floor(s.z/CHUNK),key=cx+','+cz;
-    if(key!==nodeCell){nodeCell=key;cellNodes=[];for(let j=-2;j<=2;j++)for(let i=-2;i<=2;i++)cellNodes.push(...math.nodes(cx+i,cz+j));dropRevision=-1;}
+  game.expanded=!!math;let nodeCell='',dropRegion='',dropRevision=-1,cellNodes=[];
+  function streamNodes(s){game.view=s;const cx=Math.floor(s.x/CHUNK),cz=Math.floor(s.z/CHUNK),key=cx+','+cz;
+    if(key!==nodeCell){nodeCell=key;cellNodes=[];if(math)for(let j=-2;j<=2;j++)for(let i=-2;i<=2;i++)cellNodes.push(...math.nodes(cx+i,cz+j));dropRevision=-1;}
+    const region=Math.floor(s.x/12)+','+Math.floor(s.z/12);if(region!==dropRegion){dropRegion=region;dropRevision=-1;}
     if(dropRevision!==game.revision){dropRevision=game.revision;nodes.splice(0,nodes.length,...baseNodes.filter(n=>n.type==='spring'||Math.hypot(n.x-s.x,n.z-s.z)<100),...cellNodes,...game.state.drops.filter(d=>Math.hypot(d.x-s.x,d.z-s.z)<90));world.sync();}
   }
   let selected=game.state.selected||0,attack=null,target=null,building=null,placement=null,lastSave=0,saveState=saved?'已读取本机存档':'本机自动存档',noticeOnce=false,extension=null,remoteAction=null;
@@ -41,11 +42,11 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
   function action(){
     if(!player.getState().active||attack||dismantling)return;
     if(building&&placement){const r=execute('build',{type:building,...placement},()=>game.build(building,placement.x,placement.z,placement.yaw,player.getState()));if(r.ok||r.pending){cancelBuild();world.sync();}if(!r.pending)result(r);return;}
+    if(target?.type==='drop'){result(execute('pickup',{id:target.id},()=>game.pickup(target.id,player.getState())));return;}
     if(extension?.action(held(),target))return;
     if(ITEMS[held()]?.food||ITEMS[held()]?.water||ITEMS[held()]?.health){useItem(held());return;}
     if(target?.building){if(target.type==='shelter')result(game.rest(game.state.buildings.find(b=>b.id===target.id)));else window.dispatchEvent(new Event('island:craft-open'));return;}
     if(!target)return;
-    if(target.type==='drop'){if(remoteAction){execute('pickup',{id:target.id},()=>{});return;}if(!game.canFit({[target.item]:target.count})){notify('背包已满，先腾出格子');return;}game.add({[target.item]:target.count});game.state.drops=game.state.drops.filter(d=>d.id!==target.id);result({ok:true,message:'捡回了 '+ITEMS[target.item].name});return;}
     const node=target.source||target,rule=NODE_TYPES[node.type];
     if(rule.tool&&(!matchesTool(held(),rule.tool)||!game.state.inventory[held()])){notify('需要装备'+ITEMS[rule.tool].name+' · E 背包，把工具放入下方快捷栏');return;}
     if(node.type==='tree'&&game.treeStage(node).phase==='falling')return;
@@ -72,7 +73,7 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
       const d=Math.hypot(n.x-s.x,n.z-s.z),dy=Math.abs(n.y-s.feet);if(d>3||dy>1.9)continue;
       to.set(n.x-s.x,0,n.z-s.z).normalize();const facing=to.dot(forward);if(d>.65&&facing<.78)continue;
       const locked=n.type==='tree'&&(!matchesTool(held(),'axe')||!game.state.inventory[held()]);
-      const rank=facing*1.2-d*.35-(locked?1:0);if(rank>score){score=rank;best=n;}
+      const rank=facing*1.2-d*.35-(locked?1:0)+(n.type==='drop'?.3:0);if(rank>score){score=rank;best=n;}
     }return best;
   }
   const tool=createAxeViewmodel(world.tool);camera.add(tool);scene.add(camera);
@@ -83,6 +84,7 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
     setExtension(value){extension=value;},setRemote(value){remoteAction=value;},get networked(){return !!remoteAction;},
     applyShared(state){for(const key of ['inventory','bag','inventoryVersion','depleted','trees','buildings','drops','nextDrop','nextBuilding','camp','goals','wildlife','arrows','nextArrow'])if(state[key]!==undefined)game.state[key]=structuredClone(state[key]);game.state.elapsed=state.elapsed;game.bag();game.changed();world.sync();window.dispatchEvent(new Event('island:inventory'));},
     get swing(){return attack?attack.age/attack.duration:0;},
+    get interactionTarget(){return target;},
     bind:(id,i)=>result(game.bind(id,i)),move:(from,to,split)=>result(execute('move',{from,to,split},()=>game.rearrange(from,to,split))),sort:()=>result(execute('sort',{},()=>game.sortBag())),drop:putDown,
     async requestAction(kind,args,local,pose){try{return result(remoteAction?await remoteAction(kind,args,pose):local());}catch(e){notify(e.message);return {ok:false,message:e.message};}},
     async editInventory(kind,args){try{const local=()=>kind==='transfer'?game.transfer(args):game.quickMove(args.from,args.expected);return result(remoteAction?await remoteAction(kind,args):local());}catch(e){notify(e.message);return {ok:false,message:e.message};}},
@@ -127,10 +129,10 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
         prompt.hidden=!target;prompt.classList.remove('invalid');
         if(target){
           if(target.building){label.textContent=RECIPES[target.type].name;caption.textContent=(target.type==='boat'?'左键登船':target.type==='shelter'?'左键休息':'左键制作')+' · 长按 R 拆除（返还 75%，向下取整）';if(dismantling){progress=dismantling.age;label.textContent='正在拆除 · '+RECIPES[target.type].name;caption.textContent='松开 R 或移开视线即可取消';}}
-          else if(target.type==='drop'){label.textContent=ITEMS[target.item].name+' ×'+target.count;caption.textContent='左键 · 捡回物品';}
+          else if(target.type==='drop'){label.textContent=ITEMS[target.item].name+' ×'+target.count;caption.textContent=game.canFit({[target.item]:target.count})?'左键 · 拾取到背包':'背包装不下 · 物品会留在地上';}
           else{
             const rule=NODE_TYPES[target.type],locked=rule.tool&&(!matchesTool(held(),rule.tool)||!game.state.inventory[held()]);
-            label.textContent=rule.name;caption.textContent=target.type==='spring'?'左键 · 喝淡水':'左键 · 拾取';
+            label.textContent=rule.name;caption.textContent=target.type==='spring'?'左键 · 喝淡水':'左键 · 采集，材料落地后再拾取';
             if(target.type==='spring'&&held()==='flask')caption.textContent='左键 · 水壶装水';else if(locked)caption.textContent='需要装备'+ITEMS[rule.tool].name;
             if(target.type==='tree'){
               const t=game.treeStage(target),fallen=t.phase==='fallen';progress=t.hits/(fallen?LOG_HITS:TREE_HITS);

@@ -16,7 +16,7 @@ export function createBowController(scene,camera,player,survival,math,view){
  window.addEventListener('island:primary-up',release);window.addEventListener('island:tool-change',cancel);window.addEventListener('island:cancel-build',cancel);window.addEventListener('island:activity',()=>{if(!player.getState().active)cancel();});window.addEventListener('blur',cancel);
  return {begin,cancel,get drawing(){return drawing;},get charge(){return bowPower(age).charge;},update(dt,time){
   const active=player.getState().active,held=survival.held()==='bow';if(!active||!held)cancel();if(drawing)age=Math.min(DRAW_SECONDS,age+dt);released+=dt;
-  const q=bowPower(age).charge;meter.hidden=!active||!held;meter.classList.toggle('ready',q>=.99);meter.querySelector('i').style.width=q*100+'%';meter.querySelector('small').textContent=busy?'正在搭箭':drawing?q>=.99?'满弓 · 松手射出':'松手射出 · 右键取消':'按住左键蓄力';
+  const q=bowPower(age).charge;meter.hidden=!active||!held||!drawing&&survival.interactionTarget?.type==='drop';meter.classList.toggle('ready',q>=.99);meter.querySelector('i').style.width=q*100+'%';meter.querySelector('small').textContent=busy?'正在搭箭':drawing?q>=.99?'满弓 · 松手射出':'松手射出 · 右键取消':'按住左键蓄力';
   if(held)poseDrawnBow(view,camera.aspect,q,released,survival.game.state.inventory.arrow>0,time);
   if(!survival.networked&&active){const r=resolveArrows(survival.game);if(r.changed){survival.save();window.dispatchEvent(new Event('island:inventory'));for(const m of r.messages)survival.notify(m);}}
   const elapsed=survival.game.state.elapsed;

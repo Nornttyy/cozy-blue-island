@@ -30,8 +30,9 @@ export function resolveArrows(game){
  for(const shot of s.arrows||[]){if(shot.resolved||s.elapsed<shot.start+shot.impact.time)continue;shot.resolved=true;changed=true;
   if(shot.impact.kind!=='animal')continue;
   const {target,type,point}=shot.impact,hp=s.wildlife[target]??SPECIES[type].hp;if(hp<=0)continue;
+  if(hp<=shot.damage){const loot=game.spawnLoot(SPECIES[type].loot,point);if(!loot.ok){messages.push(loot.message);continue;}}
   s.wildlife[target]=Math.max(0,hp-shot.damage);
-  if(s.wildlife[target]===0){const loot=SPECIES[type].loot;if(game.add(loot))messages.push('命中 · 获得 '+SPECIES[type].name+'的物资');else{for(const [item,count]of Object.entries(loot))s.drops.push({id:'drop'+s.nextDrop++,type:'drop',item,count,x:point.x,y:point.y,z:point.z});messages.push('背包已满，猎物掉在命中处');}}
+  if(s.wildlife[target]===0)messages.push('命中 · 战利品已落地，靠近后左键拾取');
   else messages.push('命中 '+shot.damage+' · '+SPECIES[type].name+'剩余 '+s.wildlife[target]+' 体力');
  }
  const kept=(s.arrows||[]).filter(a=>s.elapsed<a.start+a.impact.time+2);if(kept.length!==(s.arrows||[]).length){s.arrows=kept;changed=true;}
