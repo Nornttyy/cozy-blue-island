@@ -87,7 +87,7 @@ export function createSurvival(scene,camera,player,shadowChanged,assets,layoutSa
   return {
     game,select,startBuild,save,held,notify,execute,hasSave:!!saved,springModel:world.spring,world:options.descriptor,
     setExtension(value){extension=value;},setRemote(value){remoteAction=value;},get networked(){return !!remoteAction;},
-    applyShared(state){for(const key of ['inventory','bag','inventoryVersion','depleted','trees','buildings','drops','nextDrop','nextBuilding','camp','goals','wildlife','angered','arrows','nextArrow'])if(state[key]!==undefined)game.state[key]=structuredClone(state[key]);game.state.elapsed=state.elapsed;game.bag();game.changed();world.sync();window.dispatchEvent(new Event('island:inventory'));},
+    applyShared(state){for(const key of ['inventory','bag','inventoryVersion','depleted','trees','buildings','drops','nextDrop','nextBuilding','camp','goals','wildlife','arrows','nextArrow'])if(state[key]!==undefined)game.state[key]=structuredClone(state[key]);game.state.elapsed=state.elapsed;game.bag();game.changed();world.sync();window.dispatchEvent(new Event('island:inventory'));},
     get swing(){return attack?attack.age/attack.duration:0;},
     get interactionTarget(){return target;},
     get selectedModel(){return world.selectedModel;},get isPlacing(){return !!building;},
